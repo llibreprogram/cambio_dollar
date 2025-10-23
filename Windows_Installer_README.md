@@ -16,6 +16,7 @@ Este directorio contiene todos los archivos necesarios para crear un instalador 
 ### Configuración
 - **`.env.windows`** - Archivo de configuración optimizado para Windows
 - **`cambio_dollar/pyinstaller_hooks.py`** - Hooks de PyInstaller con todas las dependencias ocultas
+- **`validate_windows_build.py`** - Script de validación del empaquetado
 
 ### Scripts de Ejecución
 - **`run_server.ps1`** - Script PowerShell avanzado con opciones:
@@ -34,7 +35,8 @@ Este directorio contiene todos los archivos necesarios para crear un instalador 
 
 ### Documentación
 - **`README_Windows.md`** - Guía completa para usuarios de Windows
-- **`Makefile`** - Incluye target `make build-windows`
+- **`Windows_Installer_README.md`** - Documentación técnica del instalador
+- **`Makefile`** - Incluye targets `make build-windows` y `make validate-windows`
 
 ## 🚀 Cómo Crear el Instalador
 
@@ -47,24 +49,32 @@ Este directorio contiene todos los archivos necesarios para crear un instalador 
 
 #### Opción 1: Usando el Script de Construcción
 ```bash
+# Activar entorno virtual (si usas uno)
+source .venv/bin/activate  # Linux/Mac
+# o
+.venv\Scripts\activate     # Windows
+
+# Ejecutar construcción
 python build_windows.py
 ```
 
 #### Opción 2: Usando Make
 ```bash
 make build-windows
+# o para construcción + validación
+make validate-windows
 ```
 
 #### Opción 3: Manual
 ```bash
-# 1. Crear ejecutable
-pyinstaller cambio_dollar.spec
+# 1. Instalar PyInstaller
+pip install pyinstaller
 
-# 2. Copiar archivos de configuración
-cp .env.windows dist/
+# 2. Crear ejecutable
+python build_windows.py
 
-# 3. Crear scripts de ayuda
-# (Los scripts se generan automáticamente)
+# 3. Validar construcción
+python validate_windows_build.py
 ```
 
 ### Crear Instalador MSI
@@ -79,13 +89,15 @@ Después de la construcción, se generan:
 
 ```
 dist/
-├── cambio-dollar.exe          # Ejecutable principal
-├── run_server.bat           # Script batch simple
-├── run_server.ps1           # Script PowerShell avanzado
-└── .env                      # Configuración
+├── cambio-dollar          # Ejecutable principal (~17MB)
+├── cambio-dollar.bat      # Script batch simple
+├── run_server.ps1        # Script PowerShell avanzado
+├── installer.iss          # Script de Inno Setup
+└── .env.windows           # Configuración de ejemplo
 
-installer/
-└── cambio-dollar-setup-1.0.exe  # Instalador MSI
+build/
+├── cambio_dollar.spec     # Especificación PyInstaller
+└── ...                    # Archivos temporales
 ```
 
 ## 🎯 Características del Instalador
@@ -126,8 +138,8 @@ LOG_LEVEL=INFO
 
 ## 📊 Tamaño del Paquete
 
-- **Ejecutable**: ~50-80MB (depende de dependencias)
-- **Instalador**: ~60-90MB (incluye ejecutable + overhead)
+- **Ejecutable**: ~17MB (optimizado con UPX)
+- **Instalador**: ~20MB (incluye ejecutable + overhead)
 - **Archivos adicionales**: ~1MB (scripts y documentación)
 
 ## 🐛 Solución de Problemas
@@ -159,6 +171,7 @@ Para nuevas versiones:
 
 Para problemas específicos de Windows:
 - Verificar `README_Windows.md` para guías detalladas
+- Ejecutar `python validate_windows_build.py` para diagnosticar problemas
 - Revisar logs de PyInstaller en `build/` y `dist/`
 - Probar scripts individualmente antes del empaquetado
 
@@ -166,4 +179,5 @@ Para problemas específicos de Windows:
 
 **Versión del Paquete**: 1.0
 **Compatible con**: Windows 7+ (x64)
-**Requiere**: Python 3.10+, PyInstaller, Inno Setup
+**Requiere para construcción**: Python 3.10+, PyInstaller, Inno Setup
+**Requiere para ejecución**: Ninguno (standalone)

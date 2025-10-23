@@ -66,9 +66,9 @@ cambio_dollar_dir = project_root / 'cambio_dollar'
 # Archivos de datos a incluir
 datas = [
     # Templates HTML
-    (str(cambio_dollar_dir / 'templates'), 'cambio_dollar/templates'),
+    (str(cambio_dollar_dir / 'src' / 'cambio_dollar' / 'web' / 'templates'), 'cambio_dollar/web/templates'),
     # Archivos estáticos
-    (str(cambio_dollar_dir / 'static'), 'cambio_dollar/static'),
+    (str(cambio_dollar_dir / 'src' / 'cambio_dollar' / 'web' / 'static'), 'cambio_dollar/web/static'),
     # Archivo de configuración de ejemplo
     (str(project_root / '.env.windows'), '.'),
     # Hooks de PyInstaller
@@ -114,7 +114,7 @@ excludes = [
 
 # Configuración del ejecutable
 a = Analysis(
-    ['cambio_dollar/cli.py'],
+    ['cambio_dollar/src/cambio_dollar/cli.py'],
     pathex=[str(project_root)],
     binaries=[],
     datas=datas,
