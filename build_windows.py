@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 Cambio Dollar Project
+# All rights reserved.
+#
+# This software is licensed under the MIT License.
+# See LICENSE file for more details.
+
 """
 Script de construcción para Windows - cambio_dollar
 Crea un ejecutable standalone y scripts de ayuda para Windows.
