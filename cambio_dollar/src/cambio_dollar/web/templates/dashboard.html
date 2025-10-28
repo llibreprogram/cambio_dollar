@@ -1,0 +1,942 @@
+{% extends "base.html" %}
+
+{% block title %}Panel Mercado · Cambio Dollar{% endblock %}
+
+{% block content %}
+<aside class="metrics-sidebar" id="metrics-sidebar">
+  <div class="sidebar-content">
+    <h3 class="sidebar-title">Métricas Clave</h3>
+    
+    <div class="metric-card">
+      <span class="metric-icon">📊</span>
+      <span class="metric-label">Operaciones del día</span>
+      <span class="metric-value">{{ sidebar_metrics.trades_today }}</span>
+    </div>
+
+    <div class="metric-card">
+      <span class="metric-icon">💰</span>
+      <span class="metric-label">Ganancia de hoy</span>
+      <span class="metric-value">{{ "DOP {:,.2f}".format(sidebar_metrics.realized_profit) }}</span>
+    </div>
+    
+    <div class="metric-card">
+      <span class="metric-icon">📈</span>
+      <span class="metric-label">Tendencia 24h</span>
+      {% if sidebar_metrics.trend_24h is not none %}
+        <span class="metric-value {{ 'positive' if sidebar_metrics.trend_24h > 0 else 'negative' }}">
+          {{ "{:+.3f}".format(sidebar_metrics.trend_24h) }} DOP
+        </span>
+      {% else %}
+        <span class="metric-value">N/D</span>
+      {% endif %}
+    </div>
+    
+    <div class="metric-card">
+      <span class="metric-icon">⚡</span>
+      <span class="metric-label">Volatilidad 24h</span>
+      {% if sidebar_metrics.volatility is not none %}
+        <span class="metric-value">{{ "{:.4f}".format(sidebar_metrics.volatility) }}</span>
+      {% else %}
+        <span class="metric-value">N/D</span>
+      {% endif %}
+    </div>
+    
+    <div class="metric-card">
+      <span class="metric-icon">🏆</span>
+      <span class="metric-label">Mejor para vender USD</span>
+      {% if sidebar_metrics.best_buy_provider %}
+        <span class="metric-value">{{ sidebar_metrics.best_buy_provider.provider }}</span>
+        <small class="metric-meta"> @ {{ "{:.2f}".format(sidebar_metrics.best_buy_provider.buy_rate) }}</small>
+      {% else %}
+        <span class="metric-value">N/D</span>
+      {% endif %}
+    </div>
+
+    <div class="metric-card">
+      <span class="metric-icon">🛒</span>
+      <span class="metric-label">Mejor para comprar USD</span>
+      {% if sidebar_metrics.best_sell_provider %}
+        <span class="metric-value">{{ sidebar_metrics.best_sell_provider.provider }}</span>
+        <small class="metric-meta"> @ {{ "{:.2f}".format(sidebar_metrics.best_sell_provider.sell_rate) }}</small>
+      {% else %}
+        <span class="metric-value">N/D</span>
+      {% endif %}
+    </div>
+  </div>
+</aside>
+
+{% set drift_event = consensus.drift if consensus and consensus.drift else None %}
+{% set intensity = drift_event.metadata.get('intensity') if drift_event and drift_event.metadata else None %}
+{% set severity_label = drift_event.severity.value if drift_event else 'Sin drift' %}
+{% set provider_total = provider_status|length %}
+{% set provider_enabled = provider_status|selectattr('enabled')|list|length %}
+{% set coverage_pct = (provider_enabled / provider_total * 100)|round(0) if provider_total else 0 %}
+{% set coverage_chip_class = 'chip-positive' if coverage_pct >= 80 else ('chip-neutral' if coverage_pct >= 50 else 'chip-warn') %}
+{% if drift_event %}
+  {% if drift_event.severity.value == 'HIGH' %}
+    {% set severity_chip_class = 'chip-danger' %}
+  {% elif drift_event.severity.value == 'MEDIUM' %}
+    {% set severity_chip_class = 'chip-warn' %}
+  {% else %}
+    {% set severity_chip_class = 'chip-neutral' %}
+  {% endif %}
+{% else %}
+  {% set severity_chip_class = 'chip-neutral' %}
+{% endif %}
+{% set forecast_band = (forecast.confidence_interval if forecast else None) %}
+<section class="hero-banner">
+  <div class="hero-intro">
+    <!-- Indicador de última actualización -->
+    <div class="last-update-indicator">
+      <span class="pulse-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite;"></span>
+      <span>Actualizado hace <strong id="time-ago" style="color: var(--accent-cyan);">—</strong></span>
+      <button id="sidebar-toggle" class="mini-refresh-btn" style="margin-left: 0.5rem;">
+        📊 Métricas
+      </button>
+      <button id="manual-refresh-btn" class="mini-refresh-btn">
+        🔄 Refrescar ahora
+      </button>
+    </div>
+    
+    <h1 class="hero-title">Centro de control USD/DOP</h1>
+    <p class="hero-summary">
+      {% if consensus %}
+        Seguimiento en tiempo real al consenso del mercado: mid {{ "{:.2f}".format(consensus.mid_rate) }} DOP,
+        divergencia {{ "{:.3f}".format(consensus.divergence_range) }} y {{ provider_enabled }}/{{ provider_total }} proveedores activos.
+      {% else %}
+        Ejecuta una captura para generar el consenso inicial y desbloquear la analítica del panel.
+      {% endif %}
+    </p>
+    <div class="insight-chips">
+      {% if consensus %}
+        <span class="chip chip-positive">📊 Mid {{ "{:.2f}".format(consensus.mid_rate) }} DOP</span>
+      {% endif %}
+      <span class="chip {{ severity_chip_class }}">
+        {% if drift_event %}
+          ⚠️ Drift {{ severity_label }}{% if intensity is not none %} · {{ "{:.2f}".format(intensity) }}×{% endif %}
+        {% else %}
+          ✅ Sin drift relevante
+        {% endif %}
+      </span>
+      <span class="chip {{ coverage_chip_class }}" id="coverage-chip">
+        🔌 {{ provider_enabled }}/{{ provider_total }} activos ({{ coverage_pct }}%)
+      </span>
+      {% if forecast %}
+        <span class="chip chip-neutral">🤖 Forecast ±{{ "{:.2f}".format(forecast_band) }} DOP</span>
+      {% endif %}
+    </div>
+    <div class="hero-actions">
+      <button
+        class="command-btn hero-action"
+        data-command="fetch"
+        data-endpoint="/api/capture"
+        data-method="POST"
+        data-status-target="#hero-status"
+      >
+        ⚡ Capturar mercado
+      </button>
+      <button
+        class="command-btn hero-action hero-action--secondary"
+        data-command="analyze"
+        data-endpoint="/api/analyze"
+        data-method="POST"
+        data-status-target="#hero-status"
+      >
+        🤖 Recalcular estrategia
+      </button>
+      <a class="hero-action hero-action--link" href="/api/consensus" target="_blank" rel="noopener">
+        Ver API JSON
+      </a>
+    </div>
+    <p id="hero-status" class="hero-status hint"></p>
+  </div>
+  <div class="hero-stats">
+    <!-- Calculadora Rápida -->
+    <div class="quick-calculator" style="grid-column: 1 / -1; padding: 1.2rem; border-radius: 16px; background: linear-gradient(135deg, rgba(76, 195, 255, 0.15), rgba(93, 228, 214, 0.12)); border: 1px solid rgba(151, 217, 255, 0.25);">
+      <h4 style="margin: 0 0 1rem 0; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+        🧮 Calculadora Rápida
+        <span style="margin-left: auto; font-size: 0.75rem; font-weight: 400; color: var(--text-muted);">Cálculo instantáneo</span>
+      </h4>
+      <div style="display: grid; gap: 0.75rem;">
+        <input 
+          type="number" 
+          id="calc-amount" 
+          placeholder="Ingresa monto en USD..." 
+          min="0.01" 
+          step="0.01"
+          style="width: 100%; padding: 0.75rem; border-radius: 10px; border: 1px solid rgba(151, 217, 255, 0.25); background: rgba(9, 14, 24, 0.6); color: var(--text-primary); font-size: 0.95rem; transition: border-color 0.2s;"
+          onfocus="this.style.borderColor='rgba(76, 195, 255, 0.6)'"
+          onblur="this.style.borderColor='rgba(151, 217, 255, 0.25)'"
+        />
+        <div class="calc-results" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
+          <div class="calc-result" style="padding: 0.65rem; background: rgba(9, 14, 24, 0.5); border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.12);">
+            <div style="color: var(--text-muted); margin-bottom: 0.25rem; font-size: 0.75rem;">💵 Comprar</div>
+            <div id="calc-buy" style="font-weight: 600; font-size: 1.05rem; color: #4cc3ff;">—</div>
+          </div>
+          <div class="calc-result" style="padding: 0.65rem; background: rgba(9, 14, 24, 0.5); border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.12);">
+            <div style="color: var(--text-muted); margin-bottom: 0.25rem; font-size: 0.75rem;">💸 Vender</div>
+            <div id="calc-sell" style="font-weight: 600; font-size: 1.05rem; color: #5de4d6;">—</div>
+          </div>
+          <div class="calc-result" style="padding: 0.65rem; background: rgba(121, 255, 183, 0.08); border-radius: 8px; border: 1px solid rgba(121, 255, 183, 0.25);">
+            <div style="color: var(--text-muted); margin-bottom: 0.25rem; font-size: 0.75rem;">📈 Ganancia</div>
+            <div id="calc-profit" style="font-weight: 600; font-size: 1.05rem; color: #10b981;">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-stat-card">
+      <span class="hero-stat-label">Acción sugerida</span>
+      <span class="hero-stat-value">
+        {{ recommendation.action.value.upper() if recommendation else '—' }}
+      </span>
+      <span class="hero-stat-meta">
+        Confianza {{ "{:.0f}%".format(recommendation.score * 100) if recommendation else '—' }}
+      </span>
+    </div>
+    <div class="hero-stat-card">
+      <span class="hero-stat-label">Ganancia esperada</span>
+      <span class="hero-stat-value">
+        {{ "{:.2f}".format(recommendation.expected_profit) if recommendation else '—' }} DOP
+      </span>
+      <span class="hero-stat-meta">
+        Ventaja {{ "{:.3f}".format(recommendation.spread_advantage) if recommendation and recommendation.spread_advantage is not none else '—' }}
+      </span>
+    </div>
+    <div class="hero-stat-card">
+      <span class="hero-stat-label">Próximo forecast</span>
+      <span class="hero-stat-value">
+        {% if forecast %}
+          {{ "{:.2f}".format(forecast.expected_profit_end_day) }} DOP
+        {% else %}
+          —
+        {% endif %}
+      </span>
+      <span class="hero-stat-meta">
+        {% if forecast %}
+          Mejor {{ "{:.2f}".format(forecast.best_case) }} · Peor {{ "{:.2f}".format(forecast.worst_case) }}
+        {% else %}
+          Sin suficientes datos
+        {% endif %}
+      </span>
+    </div>
+  </div>
+</section>
+
+<!-- Sección de Gráfico de Tendencia -->
+<section class="card accent" style="margin-bottom: 2rem;">
+  <div class="card-header">
+    <div>
+      <h2 class="card-title">📈 Tendencia de Tasas (Últimas 24h)</h2>
+      <p style="margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--text-muted);">
+        Visualización histórica del comportamiento del mercado USD/DOP
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+      <button class="chart-period-btn live-btn" data-hours="0.5" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; animation: pulse-live 2s infinite;">LIVE</button>
+      <button class="chart-period-btn" data-hours="6" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(76, 195, 255, 0.1); color: #dcf6ff; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;">6h</button>
+      <button class="chart-period-btn" data-hours="12" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(76, 195, 255, 0.1); color: #dcf6ff; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;">12h</button>
+      <button class="chart-period-btn active" data-hours="24" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.4); background: rgba(76, 195, 255, 0.25); color: #dcf6ff; font-size: 0.8rem; cursor: pointer; font-weight: 600; transition: all 0.2s;">24h</button>
+      <button class="chart-period-btn" data-hours="48" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(76, 195, 255, 0.1); color: #dcf6ff; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;">48h</button>
+    </div>
+  </div>
+  
+  <div style="position: relative; height: 300px; margin-top: 1rem;">
+    <canvas id="trend-chart" width="800" height="300"></canvas>
+  </div>
+  
+  <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(151, 217, 255, 0.14); display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; font-size: 0.85rem;">
+    <div>
+      <div style="color: var(--text-muted); margin-bottom: 0.25rem;">Promedio Compra</div>
+      <div id="chart-avg-buy" style="font-size: 1.1rem; font-weight: 600; color: #4cc3ff;">—</div>
+    </div>
+    <div>
+      <div style="color: var(--text-muted); margin-bottom: 0.25rem;">Promedio Venta</div>
+      <div id="chart-avg-sell" style="font-size: 1.1rem; font-weight: 600; color: #5de4d6;">—</div>
+    </div>
+    <div>
+      <div style="color: var(--text-muted); margin-bottom: 0.25rem;">Volatilidad</div>
+      <div id="chart-volatility" style="font-size: 1.1rem; font-weight: 600; color: #ffc961;">—</div>
+    </div>
+    <div>
+      <div style="color: var(--text-muted); margin-bottom: 0.25rem;">Tendencia</div>
+      <div id="chart-trend" style="font-size: 1.1rem; font-weight: 600;">—</div>
+    </div>
+  </div>
+</section>
+
+<section class="card-grid highlight-grid">
+  <article class="card accent data-card">
+    <header class="card-header card-header--stacked">
+      <div>
+        <span class="pill">Consenso</span>
+        <h3 class="card-title">Condiciones actuales</h3>
+      </div>
+      <span class="timestamp">{{ consensus.timestamp.strftime("%Y-%m-%d %H:%M") if consensus else '—' }}</span>
+    </header>
+    {% if consensus %}
+      <div class="stat-grid">
+        <div class="stat-block">
+          <span class="stat-label">Compra</span>
+          <span class="stat-value">{{ "{:.2f}".format(consensus.buy_rate) }}</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">Venta</span>
+          <span class="stat-value">{{ "{:.2f}".format(consensus.sell_rate) }}</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">Mid ponderado</span>
+          <span class="stat-value">
+            {{ "{:.2f}".format(consensus.weighted_mid_rate) if consensus.weighted_mid_rate is not none else '—' }}
+          </span>
+        </div>
+      </div>
+      <div class="stat-foot">
+        <span>Divergencia <strong>{{ "{:.3f}".format(consensus.divergence_range) }}</strong></span>
+        {% if drift_event %}
+          <span class="trend-badge trend-{{ drift_event.severity.value.lower() }}">
+            {{ '↑' if drift_event.direction.value == 'UP' else '↓' }} {{ drift_event.severity.value }}
+          </span>
+        {% endif %}
+      </div>
+    {% else %}
+      <p class="empty-state">Aún no hay consenso registrado.</p>
+    {% endif %}
+  </article>
+
+  <article class="card accent success data-card">
+    <header class="card-header card-header--stacked">
+      <div>
+        <span class="pill pill-success">IA</span>
+        <h3 class="card-title">Recomendación activa</h3>
+      </div>
+      <span class="timestamp">{{ recommendation_generated_at.strftime("%Y-%m-%d %H:%M") if recommendation_generated_at else '—' }}</span>
+    </header>
+    <div class="stat-grid">
+      <div class="stat-block stat-block--highlight">
+        <span class="stat-label">Acción</span>
+        <span class="stat-value">{{ recommendation.action.value.upper() }}</span>
+      </div>
+      <div class="stat-block">
+        <span class="stat-label">Confianza</span>
+        <span class="stat-value">{{ "{:.0f}%".format(recommendation.score * 100) }}</span>
+      </div>
+      <div class="stat-block">
+        <span class="stat-label">Profit esperado</span>
+        <span class="stat-value">{{ "{:.2f}".format(recommendation.expected_profit) }} DOP</span>
+      </div>
+    </div>
+    <ul class="mini-list mini-list--bullets">
+      <li>Compra sugerida <strong>{{ "{:.2f}".format(recommendation.suggested_buy_rate) if recommendation.suggested_buy_rate is not none else '—' }}</strong></li>
+      <li>Venta sugerida <strong>{{ "{:.2f}".format(recommendation.suggested_sell_rate) if recommendation.suggested_sell_rate is not none else '—' }}</strong></li>
+      <li>Ventaja vs mercado <strong>{{ "{:.3f}".format(recommendation.spread_advantage) if recommendation.spread_advantage is not none else '—' }}</strong></li>
+    </ul>
+    <div class="reason-details">
+      <p class="reason">{{ recommendation.reason }}</p>
+      {% if recommendation.metadata %}
+        <ul class="mini-list mini-list--bullets">
+          <li>Momentum: <strong>{{ "{:+.4f}".format(recommendation.metadata.momentum_per_hour) }}</strong></li>
+          <li>Volatilidad: <strong>{{ "{:.4f}".format(recommendation.metadata.volatility) }}</strong></li>
+          <li>Spread Neto: <strong>{{ "{:.4f}".format(recommendation.metadata.net_spread) }}</strong></li>
+          <li>Ventaja Spread: <strong>{{ "{:+.4f}".format(recommendation.metadata.spread_advantage) }}</strong></li>
+        </ul>
+      {% endif %}
+    </div>
+  </article>
+
+  <article class="card accent forecast data-card">
+    <header class="card-header card-header--stacked">
+      <div>
+        <span class="pill pill-info">Forecast</span>
+        <h3 class="card-title">Escenarios de cierre</h3>
+      </div>
+      <span class="timestamp">{{ forecast.generated_at.strftime("%Y-%m-%d %H:%M") if forecast else '—' }}</span>
+    </header>
+    {% if forecast %}
+      <div class="stat-grid">
+        <div class="stat-block">
+          <span class="stat-label">Esperado</span>
+          <span class="stat-value">{{ "{:.2f}".format(forecast.expected_profit_end_day) }}</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">Mejor caso</span>
+          <span class="stat-value">{{ "{:.2f}".format(forecast.best_case) }}</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">Peor caso</span>
+          <span class="stat-value">{{ "{:.2f}".format(forecast.worst_case) }}</span>
+        </div>
+      </div>
+      <div class="stat-foot">
+        Intervalo ±{{ "{:.2f}".format(forecast.confidence_interval) }} DOP · {{ forecast.details }}
+      </div>
+    {% else %}
+      <p class="empty-state">No hay suficientes datos para proyectar el día.</p>
+    {% endif %}
+  </article>
+
+  <article class="card data-card">
+    <header class="card-header card-header--stacked">
+      <div>
+        <span class="pill">Scheduler</span>
+        <h3 class="card-title">Capturas automáticas</h3>
+      </div>
+      <span class="timestamp">Intervalo {{ scheduler.get('interval_seconds') }} s</span>
+    </header>
+    <ul class="mini-list">
+      <li>Estado
+        <span class="status-dot {{ 'status-dot--ok' if scheduler.get('running') else 'status-dot--warn' }}">
+          {{ 'Activo' if scheduler.get('running') else 'Inactivo' }}
+        </span>
+      </li>
+      <li>Última corrida · {{ scheduler.get('last_run') or 'N/D' }}</li>
+      <li>Última exitosa · {{ scheduler.get('last_success') or 'N/D' }}</li>
+      {% if scheduler.get('last_error') %}
+        <li>Último error · <span class="status-error">{{ scheduler.get('last_error') }}</span></li>
+      {% endif %}
+    </ul>
+    <div class="progress-track">
+      <div
+        class="progress-value"
+        style="--progress: {{ 100 if scheduler.get('running') else 0 }}%;"
+      ></div>
+    </div>
+    <button
+      class="primary-btn command-btn"
+      data-command="fetch"
+      data-endpoint="/api/capture"
+      data-method="POST"
+      data-status-target="#capture-msg"
+    >
+      Capturar ahora
+    </button>
+    <p id="capture-msg" class="hint"></p>
+  </article>
+</section>
+
+<section class="card">
+  <header class="section-heading">
+    <div>
+      <h2>Estado de proveedores</h2>
+      <p>Monitorea cobertura y frescura de cada fuente de datos.</p>
+    </div>
+    <span class="chip {{ coverage_chip_class }}" id="coverage-chip-secondary">
+      🔌 {{ provider_enabled }}/{{ provider_total }} activos ({{ coverage_pct }}%)
+    </span>
+  </header>
+  
+  <!-- Filtros de tabla -->
+  <div class="table-filters" style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; padding: 1rem; background: rgba(9, 14, 24, 0.4); border-radius: 12px; border: 1px solid rgba(151, 217, 255, 0.12);">
+    <div style="flex: 1; min-width: 200px;">
+      <label style="display: block; margin-bottom: 0.4rem; font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">🔍 Buscar proveedor</label>
+      <input 
+        type="text" 
+        id="provider-search" 
+        placeholder="Escribe nombre..." 
+        style="width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(6, 12, 22, 0.6); color: var(--text-primary); font-size: 0.9rem; transition: border-color 0.2s;"
+        onfocus="this.style.borderColor='rgba(76, 195, 255, 0.5)'"
+        onblur="this.style.borderColor='rgba(151, 217, 255, 0.2)'"
+      />
+    </div>
+    
+    <div style="flex: 0 0 150px;">
+      <label style="display: block; margin-bottom: 0.4rem; font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">📊 Estado</label>
+      <select 
+        id="provider-status-filter" 
+        style="width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(6, 12, 22, 0.6); color: var(--text-primary); font-size: 0.9rem; cursor: pointer;"
+      >
+        <option value="all">Todos</option>
+        <option value="active">Solo activos</option>
+        <option value="inactive">Solo inactivos</option>
+      </select>
+    </div>
+    
+    <div style="flex: 0 0 150px;">
+      <label style="display: block; margin-bottom: 0.4rem; font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">🏢 Origen</label>
+      <select 
+        id="provider-origin-filter" 
+        style="width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(6, 12, 22, 0.6); color: var(--text-primary); font-size: 0.9rem; cursor: pointer;"
+      >
+        <option value="all">Todos</option>
+        <option value="directo">Directo</option>
+        <option value="infodolar">InfoDolar</option>
+        <option value="agregado">Agregado</option>
+      </select>
+    </div>
+    
+    <div style="flex: 0; display: flex; align-items: flex-end;">
+      <button 
+        id="clear-filters-btn" 
+        style="padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid rgba(255, 119, 104, 0.3); background: rgba(255, 119, 104, 0.15); color: #ffc1c1; font-size: 0.85rem; cursor: pointer; font-weight: 600; transition: all 0.2s; white-space: nowrap;"
+        onmouseover="this.style.background='rgba(255, 119, 104, 0.25)'"
+        onmouseout="this.style.background='rgba(255, 119, 104, 0.15)'"
+      >
+        🔄 Limpiar
+      </button>
+    </div>
+    
+    <div style="flex: 1 0 100%; margin-top: 0.5rem;">
+      <span id="filter-results-count" style="font-size: 0.85rem; color: var(--text-muted);">
+        Mostrando <strong id="visible-count">{{ provider_status|length }}</strong> de <strong>{{ provider_status|length }}</strong> proveedores
+      </span>
+    </div>
+  </div>
+  
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Proveedor</th>
+          <th>Habilitado</th>
+          <th>Origen</th>
+          <th>Compra</th>
+          <th>Venta</th>
+          <th>Actualización</th>
+        </tr>
+      </thead>
+      <tbody id="provider-table-body">
+        {% for provider in provider_status %}
+          <tr>
+            <td>{{ provider.name }}</td>
+            <td>
+              <span class="tag {{ 'tag-on' if provider.enabled else 'tag-off' }}">
+                {{ 'Sí' if provider.enabled else 'No' }}
+              </span>
+            </td>
+            <td>
+              {% if provider.aggregated %}
+                <span class="tag tag-aggregated">{{ provider.origin or 'Agregado' }}</span>
+              {% else %}
+                {{ provider.origin or 'Directo' }}
+              {% endif %}
+            </td>
+            <td>{{ "{:.2f}".format(provider.buy_rate) if provider.buy_rate is not none else '—' }}</td>
+            <td>{{ "{:.2f}".format(provider.sell_rate) if provider.sell_rate is not none else '—' }}</td>
+            <td>{{ provider.last_timestamp.strftime("%Y-%m-%d %H:%M") if provider.last_timestamp else '—' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- MEJORA 8: MODO COMPARACIÓN DE PROVEEDORES -->
+<section class="card">
+  <header class="section-heading">
+    <div>
+      <h2>⚖️ Comparar Proveedores</h2>
+      <p>Selecciona dos proveedores para ver una comparación directa de sus tasas.</p>
+    </div>
+  </header>
+  <div class="provider-comparison">
+    <div class="comparison-selector">
+      <select id="provider-1" class="comparison-select">
+        <option value="">Seleccionar Proveedor 1</option>
+        {% for p in provider_status %}
+          <option value="{{ p.name }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <span class="vs-badge">VS</span>
+      <select id="provider-2" class="comparison-select">
+        <option value="">Seleccionar Proveedor 2</option>
+        {% for p in provider_status %}
+          <option value="{{ p.name }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="comparison-results" id="comparison-results-container">
+      <!-- Los resultados se insertarán aquí vía JS -->
+      <div class="empty-state-small">
+        <p>Selecciona dos proveedores para iniciar la comparación.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card responsive-grid">
+  <div>
+    <header class="section-heading">
+      <h2>Snapshots recientes</h2>
+      <p>Lecturas crudas de cada proveedor en la ventana seleccionada.</p>
+    </header>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Proveedor</th>
+            <th>Compra</th>
+            <th>Venta</th>
+            <th>Confianza</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for snapshot in recent_snapshots %}
+            <tr>
+              <td>{{ snapshot.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
+              <td>{{ snapshot.source }}</td>
+              <td>{{ "{:.2f}".format(snapshot.buy_rate) }}</td>
+              <td>{{ "{:.2f}".format(snapshot.sell_rate) }}</td>
+              <td>{{ "{:.2f}".format(snapshot.confidence) }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="5" class="empty-state">Sin lecturas almacenadas.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <header class="section-heading">
+      <h2>Recomendaciones recientes</h2>
+      <p>Historial corto para validar consistencia del motor IA.</p>
+    </header>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Acción</th>
+            <th>Confianza</th>
+            <th>Profit (DOP)</th>
+            <th>Ventaja</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in recommendation_history %}
+            <tr>
+              <td>{{ item.generated_at.strftime("%H:%M") }}</td>
+              <td>{{ item.action.value.upper() }}</td>
+              <td>{{ "{:.0f}%".format(item.score * 100) }}</td>
+              <td>{{ "{:.2f}".format(item.expected_profit) }}</td>
+              <td>{{ "{:.3f}".format(item.spread_advantage) if item.spread_advantage is not none else '—' }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="5" class="empty-state">Sin recomendaciones calculadas.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <header class="section-heading">
+      <h2>Historial de Operaciones</h2>
+      <a href="/api/export/trades.csv" class="command-btn hero-action--secondary" style="text-decoration: none; font-size: 0.8rem; padding: 0.4rem 0.8rem;">📥 Exportar Todos</a>
+    </header>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Acción</th>
+            <th>USD</th>
+            <th>Tasa</th>
+            <th>Profit (DOP)</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for trade in trade_history %}
+            <tr data-trade-id="{{ trade.id }}">
+              <td>{{ trade.timestamp.strftime("%H:%M") }}</td>
+              <td>{{ trade.action.value.upper() }}</td>
+              <td>{{ "{:.2f}".format(trade.usd_amount) }}</td>
+              <td>{{ "{:.2f}".format(trade.rate) }}</td>
+              <td class="{{ 'positive' if trade.profit_dop >= 0 else 'negative' }}">{{ "{:.2f}".format(trade.profit_dop) }}</td>
+              <td>
+                <button class="btn-edit-trade mini-btn" data-trade-id="{{ trade.id }}">✏️</button>
+                <button class="btn-delete-trade mini-btn" data-trade-id="{{ trade.id }}">🗑️</button>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="empty-state">Sin operaciones registradas.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <header class="section-heading">
+    <div>
+      <h2>Eventos de drift recientes</h2>
+      <p>Vigilancia de cambios de régimen detectados por EWMA + CUSUM.</p>
+    </div>
+  </header>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Dirección</th>
+          <th>Métrica</th>
+          <th>Valor</th>
+          <th>EWMA</th>
+          <th>Umbral</th>
+          <th>Severidad</th>
+          <th>Intensidad</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if drift_events %}
+          {% for event in drift_events %}
+            {% set drift_intensity = event.metadata.get('intensity') if event.metadata else None %}
+            <tr>
+              <td>{{ event.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
+              <td>{{ '↑' if event.direction.value == 'UP' else '↓' }} {{ event.direction.value }}</td>
+              <td>{{ event.metric }}</td>
+              <td>{{ "{:.3f}".format(event.value) }}</td>
+              <td>{{ "{:.3f}".format(event.ewma) }}</td>
+              <td>{{ "{:.3f}".format(event.threshold) }}</td>
+              <td>
+                <span class="tag tag-{{ event.severity.value.lower() }}">{{ event.severity.value }}</span>
+              </td>
+              <td>{{ "{:.2f}".format(drift_intensity) if drift_intensity is not none else '—' }}</td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="8" class="empty-state">Sin eventos detectados todavía.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <header class="section-heading">
+    <div>
+      <h2>Guía rápida de comandos</h2>
+      <p>Lanza acciones críticas desde el panel sin abrir la terminal.</p>
+    </div>
+  </header>
+  <ul class="command-grid">
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make fetch</code>
+          <span>Captura nuevas cotizaciones y refresca el consenso.</span>
+        </div>
+        <button class="command-btn" data-command="fetch" data-endpoint="/api/capture" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make analyze</code>
+          <span>Calcula la recomendación de la estrategia con los últimos datos.</span>
+        </div>
+        <button class="command-btn" data-command="analyze" data-endpoint="/api/analyze" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make forecast</code>
+          <span>Proyecta el beneficio esperado al cierre del día.</span>
+        </div>
+        <button class="command-btn" data-command="forecast" data-endpoint="/api/forecast" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make compare</code>
+          <span>Revisa la divergencia entre proveedores en la última captura.</span>
+        </div>
+        <button class="command-btn" data-command="compare" data-endpoint="/api/compare" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make providers</code>
+          <span>Consulta el estado de cada proveedor configurado.</span>
+        </div>
+        <button class="command-btn" data-command="providers" data-endpoint="/api/providers/refresh" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make trade</code>
+          <span>Registra una operación de compra o venta en el sistema.</span>
+        </div>
+        <button class="command-btn" data-command="trade-form" data-action="show-form">📝 Abrir formulario</button>
+      </div>
+      
+      <!-- Formulario de Trade Mejorado -->
+      <div id="trade-form" style="display: none; margin-top: 1.5rem;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1.5rem; border-radius: 12px 12px 0 0; color: white;">
+          <h3 style="margin: 0 0 0.5rem 0; font-size: 1.25rem; font-weight: 600;">💰 Registrar Operación</h3>
+          <p style="margin: 0; opacity: 0.9; font-size: 0.875rem;">Completa los datos de tu operación de cambio USD/DOP</p>
+        </div>
+        
+        <div style="background: white; padding: 1.5rem; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.07);">
+          <!-- Selector de Acción Destacado -->
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.75rem; font-size: 0.875rem; font-weight: 600; color: #374151;">
+              Tipo de operación
+            </label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+              <label class="trade-action-option" style="position: relative; cursor: pointer;">
+                <input type="radio" name="trade-action-radio" value="buy" style="position: absolute; opacity: 0;">
+                <div class="trade-action-card" style="padding: 1rem; border: 2px solid #e5e7eb; border-radius: 8px; text-align: center; transition: all 0.2s;">
+                  <div style="font-size: 2rem; margin-bottom: 0.5rem;">💵</div>
+                  <div style="font-weight: 600; color: #10b981; margin-bottom: 0.25rem;">COMPRAR USD</div>
+                  <div style="font-size: 0.75rem; color: #6b7280;">Adquirir dólares</div>
+                </div>
+              </label>
+              <label class="trade-action-option" style="position: relative; cursor: pointer;">
+                <input type="radio" name="trade-action-radio" value="sell" checked style="position: absolute; opacity: 0;">
+                <div class="trade-action-card trade-action-selected" style="padding: 1rem; border: 2px solid #667eea; border-radius: 8px; text-align: center; transition: all 0.2s; background: #f0f4ff;">
+                  <div style="font-size: 2rem; margin-bottom: 0.5rem;">💸</div>
+                  <div style="font-weight: 600; color: #667eea; margin-bottom: 0.25rem;">VENDER USD</div>
+                  <div style="font-size: 0.75rem; color: #6b7280;">Convertir a pesos</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Campos del formulario -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+            <div>
+              <label style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151;">
+                💵 Monto en USD <span style="color: #ef4444;">*</span>
+              </label>
+              <input 
+                type="number" 
+                id="trade-amount" 
+                placeholder="Ej: 500" 
+                min="0.01" 
+                step="0.01" 
+                required
+                style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; transition: border-color 0.2s;"
+                onfocus="this.style.borderColor='#667eea'"
+                onblur="this.style.borderColor='#e5e7eb'"
+              />
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151;">
+                💱 Tasa DOP/USD <span style="color: #9ca3af; font-weight: 400;">(opcional)</span>
+              </label>
+              <input 
+                type="number" 
+                id="trade-rate" 
+                placeholder="Usar consenso actual" 
+                min="0.01" 
+                step="0.01"
+                style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; transition: border-color 0.2s;"
+                onfocus="this.style.borderColor='#667eea'"
+                onblur="this.style.borderColor='#e5e7eb'"
+              />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151;">
+              💳 Comisiones en DOP <span style="color: #9ca3af; font-weight: 400;">(opcional)</span>
+            </label>
+            <input 
+              type="number" 
+              id="trade-fees" 
+              placeholder="Usar configuración por defecto" 
+              min="0" 
+              step="0.01"
+              style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#667eea'"
+              onblur="this.style.borderColor='#e5e7eb'"
+            />
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #6b7280;">
+              💡 Tip: Si dejas los campos opcionales vacíos, se usarán los valores del consenso y configuración
+            </p>
+          </div>
+
+          <!-- Botones de acción -->
+          <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+            <button 
+              class="command-btn" 
+              id="trade-submit-btn" 
+              style="flex: 1; padding: 0.875rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: white; font-weight: 600; border-radius: 8px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;"
+              onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 44px 12px rgba(102, 126, 234, 0.4)'"
+              onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'"
+            >
+              ✅ Registrar operación
+            </button>
+            <button 
+              class="command-btn" 
+              onclick="document.getElementById('trade-form').style.display='none'; document.getElementById('trade-result').textContent=''"
+              style="flex: 0; padding: 0.875rem 1.5rem; background: #6b7280; border: none; color: white; font-weight: 600; border-radius: 8px; cursor: pointer; transition: background 0.2s;"
+              onmouseover="this.style.background='#4b5563'"
+              onmouseout="this.style.background='#6b7280'"
+            >
+              ❌ Cancelar
+            </button>
+          </div>
+
+          <!-- Área de resultado -->
+          <div id="trade-result" style="margin-top: 1rem; padding: 0; font-size: 0.875rem; line-height: 1.6; white-space: pre-line;"></div>
+        </div>
+      </div>
+      
+      <p class="command-status hint">Click en el botón para abrir el formulario interactivo de registro de operaciones.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make history</code>
+          <span>Muestra las operaciones registradas más recientes.</span>
+        </div>
+        <button class="command-btn" data-command="history" data-endpoint="/api/history?limit=10" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make drift</code>
+          <span>Consulta los últimos eventos detectados por el monitor de drift.</span>
+        </div>
+        <button class="command-btn" data-command="drift" data-endpoint="/api/drift" data-method="GET">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li class="command-disabled">
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make serve</code>
+          <span>Este panel ya está activo; reinícialo desde la terminal si lo necesitas.</span>
+        </div>
+        <button class="command-btn" disabled>En ejecución</button>
+      </div>
+      <p class="command-status hint">Administra el servicio desde la terminal.</p>
+    </li>
+  </ul>
+  <p class="hint">Tip: Usa <code>make fetch repetitions=3 interval=60</code> para tres capturas consecutivas cada minuto.</p>
+</section>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+  // Global variables for Jinja2 data
+  window.GLOBAL_CONSENSUS_TIMESTAMP = '{{ consensus.timestamp if consensus else "" }}';
+  window.GLOBAL_CONSENSUS_BUY_RATE = {{ consensus.buy_rate if consensus else 0 }};
+  window.GLOBAL_CONSENSUS_SELL_RATE = {{ consensus.sell_rate if consensus else 0 }};
+  window.GLOBAL_PROVIDER_STATUS_JSON = {{ provider_status_json|tojson|safe }};
+</script>
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

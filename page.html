@@ -1,0 +1,3111 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Panel Mercado · Cambio Dollar</title>
+    <style>
+      :root {
+        font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg-base: #050910;
+        --panel-surface: rgba(13, 20, 31, 0.78);
+        --panel-elevated: rgba(13, 21, 34, 0.88);
+        --panel-border: rgba(180, 220, 255, 0.12);
+        --panel-border-strong: rgba(180, 220, 255, 0.2);
+        --text-primary: #f1f7ff;
+        --text-muted: rgba(241, 247, 255, 0.72);
+        --accent-cyan: #4cc3ff;
+        --accent-mint: #5de4d6;
+        --accent-amber: #ffc961;
+        --accent-rose: #ff7b9c;
+        --chip-neutral: rgba(148, 218, 255, 0.14);
+        --chip-positive: rgba(99, 255, 206, 0.18);
+        --chip-warn: rgba(255, 207, 97, 0.18);
+        --chip-danger: rgba(255, 119, 104, 0.18);
+        --shadow-strong: 0 25px 55px rgba(3, 7, 15, 0.55);
+        --shadow-soft: 0 16px 35px rgba(5, 12, 22, 0.35);
+        --border-color: rgba(151, 217, 255, 0.16);
+        --accent-cyan-dark: rgba(76, 195, 255, 0.26);
+        --positive-color: #9ff7cc;
+        --negative-color: #ffb8b8;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(120% 120% at 15% 10%, rgba(77, 173, 255, 0.18), transparent 55%),
+          radial-gradient(110% 140% at 85% 12%, rgba(93, 228, 214, 0.15), transparent 60%),
+          linear-gradient(180deg, rgba(6, 12, 22, 0.92), rgba(5, 9, 16, 0.98));
+        pointer-events: none;
+        z-index: -1;
+      }
+
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg-base: #f4f7fb;
+        --panel-surface: rgba(255, 255, 255, 0.9);
+        --panel-elevated: rgba(255, 255, 255, 0.98);
+        --panel-border: rgba(28, 51, 82, 0.12);
+        --panel-border-strong: rgba(28, 51, 82, 0.22);
+        --text-primary: #1c2a3a;
+        --text-muted: rgba(28, 42, 58, 0.65);
+        --accent-cyan: #147dd9;
+        --accent-mint: #0fb9b5;
+        --accent-amber: #f59f45;
+        --accent-rose: #f45d79;
+        --chip-neutral: rgba(20, 125, 217, 0.12);
+        --chip-positive: rgba(15, 185, 129, 0.14);
+        --chip-warn: rgba(245, 159, 69, 0.18);
+        --chip-danger: rgba(244, 93, 120, 0.18);
+        --shadow-strong: 0 28px 55px rgba(33, 56, 86, 0.12);
+        --shadow-soft: 0 16px 30px rgba(67, 89, 120, 0.12);
+        --border-color: rgba(28, 51, 82, 0.16);
+        --accent-cyan-dark: rgba(20, 125, 217, 0.18);
+        --positive-color: #059669;
+        --negative-color: #dc2626;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg-base);
+        color: var(--text-primary);
+        line-height: 1.55;
+        letter-spacing: -0.01em;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      header,
+      main,
+      footer {
+        width: min(1180px, calc(100% - 3rem));
+        margin: 0 auto;
+      }
+
+      main {
+        padding: 2.5rem 0 3.25rem;
+      }
+
+      .topbar {
+        margin-top: 2.4rem;
+        padding: 1rem 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1.5rem;
+        border-radius: 20px;
+        background: linear-gradient(135deg, rgba(12, 19, 31, 0.82), rgba(18, 28, 44, 0.76));
+        border: 1px solid rgba(151, 217, 255, 0.12);
+        box-shadow: var(--shadow-strong);
+        backdrop-filter: blur(18px);
+      }
+
+      .brand {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .brand-title {
+        font-size: clamp(1.2rem, 2vw, 1.35rem);
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .brand-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .topbar-links {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .topbar-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.45rem 0.95rem;
+        border-radius: 999px;
+        border: 1px solid rgba(151, 217, 255, 0.2);
+        color: #d9f1ff;
+        background: rgba(76, 195, 255, 0.16);
+        font-weight: 600;
+        font-size: 0.88rem;
+        letter-spacing: 0.02em;
+        text-decoration: none;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      }
+
+      .topbar-link:hover {
+        transform: translateY(-1px);
+        border-color: rgba(151, 217, 255, 0.45);
+        box-shadow: 0 12px 22px rgba(76, 195, 255, 0.18);
+      }
+
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.45rem 0.95rem;
+        border-radius: 999px;
+        border: 1px solid rgba(151, 217, 255, 0.22);
+        background: rgba(15, 24, 38, 0.7);
+        color: #d9f1ff;
+        font-weight: 600;
+        font-size: 0.88rem;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+      }
+
+      .theme-toggle:hover {
+        transform: translateY(-1px);
+        border-color: rgba(151, 217, 255, 0.45);
+        box-shadow: 0 12px 22px rgba(76, 195, 255, 0.18);
+        background: rgba(15, 24, 38, 0.85);
+      }
+
+      .theme-toggle:focus-visible {
+        outline: 2px solid var(--accent-cyan);
+        outline-offset: 2px;
+      }
+
+      a {
+        color: var(--accent-cyan);
+        text-decoration: none;
+        transition: color 0.2s ease;
+      }
+
+      a:hover {
+        color: #8ad8ff;
+      }
+
+      .card-grid {
+        display: grid;
+        gap: 1.5rem;
+        margin-bottom: 1.75rem;
+      }
+
+      .card-grid.highlight-grid {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      }
+
+      .card {
+        position: relative;
+        padding: 1.4rem;
+        border-radius: 18px;
+        background: var(--panel-surface);
+        border: 1px solid rgba(180, 220, 255, 0.1);
+        box-shadow: var(--shadow-soft);
+        overflow: hidden;
+      }
+
+      .card.accent {
+        background: linear-gradient(140deg, rgba(16, 26, 40, 0.92), rgba(12, 18, 28, 0.78));
+        border-color: rgba(151, 217, 255, 0.18);
+      }
+
+      .card.accent::before {
+        content: "";
+        position: absolute;
+        inset: -40% -45% auto auto;
+        width: 420px;
+        height: 220px;
+        background: radial-gradient(circle at center, rgba(76, 195, 255, 0.22), transparent 65%);
+        opacity: 0.9;
+        pointer-events: none;
+      }
+
+      .card.accent.success::before {
+        background: radial-gradient(circle at center, rgba(121, 255, 183, 0.25), transparent 70%);
+      }
+
+      .card.accent.forecast::before {
+        background: radial-gradient(circle at center, rgba(255, 207, 95, 0.25), transparent 70%);
+      }
+
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+
+      .card-header--stacked {
+        align-items: flex-start;
+      }
+
+      .card-title {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+
+      .timestamp {
+        font-size: 0.82rem;
+        color: var(--text-muted);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.32rem 0.9rem;
+        border-radius: 999px;
+        background: rgba(76, 195, 255, 0.18);
+        color: #d5edff;
+        font-size: 0.76rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .pill-success {
+        background: rgba(121, 255, 183, 0.22);
+        color: #c0ffe0;
+      }
+
+      .pill-info {
+        background: rgba(255, 207, 95, 0.2);
+        color: #ffe6ac;
+      }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+      }
+
+      .stat-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding: 0.85rem;
+        border-radius: 14px;
+        background: rgba(9, 14, 24, 0.45);
+        border: 1px solid rgba(148, 218, 255, 0.08);
+      }
+
+      .stat-block--highlight {
+        background: rgba(121, 255, 183, 0.12);
+        border-color: rgba(121, 255, 183, 0.25);
+      }
+
+      .stat-label {
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+      }
+
+      .stat-value {
+        font-size: 1.35rem;
+        font-weight: 600;
+      }
+
+      .stat-foot {
+        margin-top: 1.15rem;
+        padding-top: 0.9rem;
+        border-top: 1px solid rgba(148, 218, 255, 0.14);
+        font-size: 0.88rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      .trend-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .trend-low {
+        background: rgba(121, 255, 183, 0.18);
+        color: #9ff7cc;
+      }
+
+      .trend-medium {
+        background: rgba(255, 207, 97, 0.2);
+        color: #ffe2a3;
+      }
+
+      .trend-high {
+        background: rgba(255, 119, 119, 0.22);
+        color: #ffc3c3;
+      }
+
+      .insight-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        margin: 1.1rem 0;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.85rem;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        letter-spacing: 0.02em;
+        color: #e6f4ff;
+        border: 1px solid rgba(151, 217, 255, 0.2);
+        background: rgba(25, 39, 58, 0.7);
+        backdrop-filter: blur(6px);
+      }
+
+      .chip-neutral {
+        background: var(--chip-neutral);
+      }
+
+      .chip-positive {
+        background: var(--chip-positive);
+        border-color: rgba(121, 255, 183, 0.25);
+      }
+
+      .chip-warn {
+        background: var(--chip-warn);
+        border-color: rgba(255, 207, 97, 0.25);
+      }
+
+      .chip-danger {
+        background: var(--chip-danger);
+        border-color: rgba(255, 119, 119, 0.25);
+      }
+
+      .hero-banner {
+        position: relative;
+        display: grid;
+        gap: 2.2rem;
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr);
+        padding: clamp(1.5rem, 3vw, 2.4rem);
+        margin-bottom: 2.2rem;
+        border-radius: 24px;
+        background: linear-gradient(140deg, rgba(16, 26, 40, 0.92), rgba(13, 24, 38, 0.78));
+        border: 1px solid rgba(151, 217, 255, 0.18);
+        box-shadow: var(--shadow-strong);
+        overflow: hidden;
+      }
+
+      .hero-banner::after {
+        content: "";
+        position: absolute;
+        inset: auto -25% -60% auto;
+        width: 480px;
+        height: 480px;
+        background: radial-gradient(circle at center, rgba(76, 195, 255, 0.28), transparent 70%);
+        opacity: 0.8;
+        pointer-events: none;
+      }
+
+      .hero-intro {
+        position: relative;
+        z-index: 1;
+      }
+
+      .hero-title {
+        margin: 0;
+        font-size: clamp(1.85rem, 4vw, 2.45rem);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+
+      .hero-summary {
+        margin-top: 0.75rem;
+        font-size: 1rem;
+        max-width: 60ch;
+        color: var(--text-muted);
+      }
+
+      .last-update-indicator {
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        padding: 0.45rem 0.75rem;
+        border-radius: 999px;
+        background: rgba(15, 24, 38, 0.45);
+        border: 1px solid rgba(151, 217, 255, 0.14);
+        backdrop-filter: blur(12px);
+      }
+
+      .mini-refresh-btn {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.38rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid rgba(151, 217, 255, 0.24);
+        background: linear-gradient(135deg, rgba(76, 195, 255, 0.18), rgba(93, 228, 214, 0.16));
+        color: #dcf6ff;
+        font-size: 0.82rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+      }
+
+      .mini-refresh-btn:hover {
+        transform: translateY(-1px);
+        border-color: rgba(151, 217, 255, 0.42);
+        box-shadow: 0 16px 28px rgba(76, 195, 255, 0.22);
+        background: linear-gradient(135deg, rgba(76, 195, 255, 0.28), rgba(93, 228, 214, 0.22));
+      }
+
+      .mini-refresh-btn:focus-visible {
+        outline: 2px solid var(--accent-cyan);
+        outline-offset: 2px;
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 1.3rem;
+      }
+
+      .hero-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.65rem 1.25rem;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        font-weight: 600;
+        font-size: 0.92rem;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+        background: linear-gradient(135deg, rgba(76, 195, 255, 0.9), rgba(93, 228, 214, 0.9));
+        color: #052138;
+      }
+
+      .hero-action:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 18px 32px rgba(76, 195, 255, 0.24);
+      }
+
+      .hero-action--secondary {
+        background: rgba(25, 39, 58, 0.78);
+        color: #dff6ff;
+        border-color: rgba(151, 217, 255, 0.25);
+      }
+
+      .hero-action--secondary:hover:not(:disabled) {
+        box-shadow: 0 16px 28px rgba(33, 107, 172, 0.2);
+      }
+
+      .hero-action--link {
+        border: none;
+        padding: 0;
+        background: none;
+        color: var(--accent-cyan);
+        font-weight: 600;
+      }
+
+      .hero-action--link:hover {
+        opacity: 0.85;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .hero-status {
+        margin-top: 0.85rem;
+        min-height: 1.2rem;
+      }
+
+      .hero-stats {
+        display: grid;
+        gap: 1rem;
+        position: relative;
+        z-index: 1;
+      }
+
+      .hero-stat-card {
+        padding: 1rem 1.1rem;
+        border-radius: 16px;
+        background: rgba(9, 14, 24, 0.6);
+        border: 1px solid rgba(151, 217, 255, 0.14);
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+      }
+
+      .hero-stat-label {
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .hero-stat-value {
+        font-size: 1.4rem;
+        font-weight: 600;
+      }
+
+      .hero-stat-meta {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      .mini-list {
+        list-style: none;
+        margin: 1.1rem 0 0;
+        padding: 0;
+        display: grid;
+        gap: 0.55rem;
+        font-size: 0.92rem;
+      }
+
+      .mini-list--bullets li {
+        position: relative;
+        padding-left: 1.1rem;
+      }
+
+      .mini-list--bullets li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        color: rgba(180, 220, 255, 0.65);
+      }
+
+      .reason {
+        margin-top: 0.9rem;
+        font-size: 0.92rem;
+        line-height: 1.45;
+        color: var(--text-muted);
+      }
+
+      .progress-track {
+        width: 100%;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(25, 39, 58, 0.6);
+        border: 1px solid rgba(151, 217, 255, 0.14);
+        margin: 1rem 0 0.75rem;
+        overflow: hidden;
+      }
+
+      .progress-value {
+        width: var(--progress, 0%);
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(135deg, rgba(76, 195, 255, 0.9), rgba(93, 228, 214, 0.9));
+        transition: width 0.4s ease;
+      }
+
+      .status-dot {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+      }
+
+      .status-dot--ok {
+        background: rgba(121, 255, 183, 0.18);
+        color: #acffd9;
+      }
+
+      .status-dot--warn {
+        background: rgba(255, 119, 104, 0.2);
+        color: #ffc1c1;
+      }
+
+      .status-error {
+        color: #ff9b9b;
+      }
+
+      .section-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1.4rem;
+      }
+
+      .section-heading h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      .section-heading p {
+        margin: 0.35rem 0 0;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+      }
+
+      .table-wrapper {
+        overflow-x: auto;
+        border-radius: 16px;
+        border: 1px solid rgba(151, 217, 255, 0.16);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: rgba(6, 12, 22, 0.72);
+      }
+
+      th,
+      td {
+        padding: 0.75rem 0.85rem;
+        text-align: left;
+        font-size: 0.92rem;
+      }
+
+      th {
+        text-transform: uppercase;
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        color: rgba(214, 234, 255, 0.75);
+        background: rgba(18, 28, 44, 0.88);
+        border-bottom: 1px solid rgba(151, 217, 255, 0.18);
+      }
+
+      tbody tr {
+        border-bottom: 1px solid rgba(151, 217, 255, 0.08);
+        transition: background 0.2s ease;
+      }
+
+      tbody tr:hover {
+        background: rgba(25, 39, 58, 0.55);
+      }
+
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      .tag {
+        display: inline-flex;
+        border-radius: 999px;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.76rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+      }
+
+      .tag-on {
+        background: rgba(121, 255, 183, 0.18);
+        color: #b8ffd3;
+      }
+
+      .tag-off {
+        background: rgba(255, 111, 111, 0.2);
+        color: #ffc5c5;
+      }
+
+      .tag-low {
+        background: rgba(94, 234, 212, 0.15);
+        color: #a5f3fc;
+      }
+
+      .tag-medium {
+        background: rgba(252, 211, 77, 0.2);
+        color: #fde68a;
+      }
+
+      .tag-high {
+        background: rgba(248, 113, 113, 0.22);
+        color: #fecaca;
+      }
+
+      .tag-aggregated {
+        background: rgba(76, 195, 255, 0.18);
+        color: #d4f0ff;
+        border: 1px dashed rgba(151, 217, 255, 0.35);
+      }
+
+      .responsive-grid {
+        display: grid;
+        gap: 1.5rem;
+      }
+
+      .command-grid {
+        list-style: none;
+        margin: 1.4rem 0 0;
+        padding: 0;
+        display: grid;
+        gap: 1rem;
+      }
+
+      .command-grid li {
+        padding: 1rem 1.2rem;
+        border-radius: 16px;
+        background: rgba(9, 14, 24, 0.6);
+        border: 1px solid rgba(151, 217, 255, 0.14);
+      }
+
+      .command-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .command-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        max-width: 70%;
+      }
+
+      .command-copy code {
+        font-size: 0.95rem;
+        color: #dff5ff;
+        font-weight: 600;
+      }
+
+      .command-btn {
+        padding: 0.55rem 1.15rem;
+        border-radius: 999px;
+        border: 1px solid rgba(151, 217, 255, 0.22);
+        background: rgba(76, 195, 255, 0.18);
+        color: #dcf6ff;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+      }
+
+      .command-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 22px rgba(76, 195, 255, 0.18);
+      }
+
+      .command-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
+      .command-btn.is-loading::after {
+        content: "…";
+        margin-left: 0.4rem;
+      }
+
+      .command-status {
+        margin: 0.55rem 0 0;
+        font-size: 0.82rem;
+        color: var(--text-muted);
+        white-space: pre-wrap;
+        line-height: 1.35;
+      }
+
+      .command-disabled {
+        background: rgba(15, 24, 38, 0.75);
+        border-style: dashed;
+        border-color: rgba(151, 217, 255, 0.18);
+      }
+
+      .primary-btn {
+        margin-top: 1.1rem;
+        padding: 0.65rem 1.25rem;
+        border-radius: 999px;
+        border: none;
+        background: linear-gradient(135deg, var(--accent-cyan), var(--accent-mint));
+        color: #052138;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+      }
+
+      .primary-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 18px 32px rgba(76, 195, 255, 0.24);
+      }
+
+      .primary-btn:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+
+      .primary-btn.is-loading::after {
+        content: "…";
+        margin-left: 0.4rem;
+      }
+
+      .hint {
+        font-size: 0.82rem;
+        color: var(--text-muted);
+        margin-top: 0.6rem;
+      }
+
+      .empty-state {
+        text-align: center;
+        color: var(--text-muted);
+        padding: 1rem 0;
+      }
+
+      footer {
+        padding: 0 0 2.5rem;
+        text-align: center;
+        font-size: 0.85rem;
+        color: rgba(224, 239, 255, 0.55);
+      }
+
+      code {
+        font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Menlo, monospace;
+      }
+
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: rgba(10, 16, 26, 0.85);
+      }
+
+      ::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: linear-gradient(135deg, rgba(76, 195, 255, 0.65), rgba(93, 228, 214, 0.65));
+      }
+
+      [data-theme="light"] body::before {
+        background: radial-gradient(120% 120% at 15% 10%, rgba(20, 125, 217, 0.14), transparent 55%),
+          radial-gradient(110% 140% at 85% 12%, rgba(15, 185, 181, 0.12), transparent 60%),
+          linear-gradient(180deg, rgba(252, 254, 255, 0.96), rgba(244, 247, 251, 0.98));
+      }
+
+      [data-theme="light"] .topbar {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(238, 245, 255, 0.9));
+        border: 1px solid var(--panel-border);
+        box-shadow: var(--shadow-soft);
+      }
+
+      [data-theme="light"] .topbar-link {
+        border-color: rgba(20, 125, 217, 0.24);
+        background: rgba(20, 125, 217, 0.12);
+        color: #0f2f4d;
+      }
+
+      [data-theme="light"] .topbar-link:hover {
+        border-color: rgba(20, 125, 217, 0.35);
+        box-shadow: 0 12px 22px rgba(20, 125, 217, 0.18);
+      }
+
+      [data-theme="light"] .theme-toggle {
+        background: rgba(255, 255, 255, 0.9);
+        border-color: rgba(28, 51, 82, 0.16);
+        color: #16324d;
+        box-shadow: none;
+      }
+
+      [data-theme="light"] .theme-toggle:hover {
+        box-shadow: 0 12px 22px rgba(20, 125, 217, 0.15);
+        background: rgba(255, 255, 255, 0.95);
+      }
+
+      [data-theme="light"] .hero-banner {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(237, 244, 255, 0.9));
+        border-color: var(--panel-border);
+        box-shadow: var(--shadow-strong);
+      }
+
+      [data-theme="light"] .hero-banner::after {
+        background: radial-gradient(circle at center, rgba(20, 125, 217, 0.18), transparent 70%);
+        opacity: 0.7;
+      }
+
+      [data-theme="light"] .hero-action {
+        color: #063052;
+      }
+
+      [data-theme="light"] .hero-action--secondary {
+        background: rgba(255, 255, 255, 0.92);
+        color: #0f365a;
+        border-color: rgba(20, 125, 217, 0.22);
+      }
+
+      [data-theme="light"] .hero-action--secondary:hover:not(:disabled) {
+        box-shadow: 0 16px 28px rgba(20, 125, 217, 0.18);
+      }
+
+      [data-theme="light"] .hero-action--link {
+        color: var(--accent-cyan);
+      }
+
+      [data-theme="light"] .last-update-indicator {
+        background: rgba(255, 255, 255, 0.82);
+        border-color: rgba(28, 51, 82, 0.12);
+        color: var(--text-muted);
+      }
+
+      [data-theme="light"] .mini-refresh-btn {
+        background: linear-gradient(135deg, rgba(20, 125, 217, 0.16), rgba(15, 185, 181, 0.14));
+        border-color: rgba(28, 51, 82, 0.18);
+        color: #0f365a;
+      }
+
+      [data-theme="light"] .mini-refresh-btn:hover {
+        box-shadow: 0 12px 22px rgba(20, 125, 217, 0.18);
+        border-color: rgba(20, 125, 217, 0.3);
+      }
+
+      [data-theme="light"] .card {
+        background: var(--panel-surface);
+        border-color: var(--panel-border);
+        box-shadow: var(--shadow-soft);
+        color: var(--text-primary);
+      }
+
+      [data-theme="light"] .card.accent {
+        background: linear-gradient(140deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 251, 0.92));
+        border-color: var(--panel-border-strong);
+      }
+
+      [data-theme="light"] .card.accent::before {
+        background: radial-gradient(circle at center, rgba(20, 125, 217, 0.18), transparent 70%);
+      }
+
+      [data-theme="light"] .card.accent.success::before {
+        background: radial-gradient(circle at center, rgba(15, 185, 129, 0.2), transparent 70%);
+      }
+
+      [data-theme="light"] .card.accent.forecast::before {
+        background: radial-gradient(circle at center, rgba(245, 159, 69, 0.2), transparent 70%);
+      }
+
+      [data-theme="light"] .stat-block {
+        background: rgba(20, 125, 217, 0.05);
+        border-color: rgba(28, 51, 82, 0.12);
+      }
+
+      [data-theme="light"] .stat-block--highlight {
+        background: rgba(15, 185, 129, 0.12);
+        border-color: rgba(15, 185, 129, 0.35);
+      }
+
+      [data-theme="light"] .stat-foot {
+        border-top-color: rgba(28, 51, 82, 0.12);
+        color: var(--text-muted);
+      }
+
+      [data-theme="light"] .chip {
+        background: rgba(20, 125, 217, 0.12);
+        border-color: rgba(20, 125, 217, 0.18);
+        color: #103d5f;
+      }
+
+      [data-theme="light"] .chip-positive {
+        border-color: rgba(15, 185, 129, 0.3);
+      }
+
+      [data-theme="light"] .chip-warn {
+        border-color: rgba(245, 159, 69, 0.3);
+      }
+
+      [data-theme="light"] .chip-danger {
+        border-color: rgba(244, 93, 120, 0.3);
+      }
+
+      [data-theme="light"] .hero-stat-card {
+        background: rgba(255, 255, 255, 0.94);
+        border-color: var(--panel-border);
+      }
+
+      [data-theme="light"] .trend-low {
+        background: rgba(15, 185, 129, 0.15);
+        color: #047857;
+      }
+
+      [data-theme="light"] .trend-medium {
+        background: rgba(245, 159, 69, 0.18);
+        color: #c05621;
+      }
+
+      [data-theme="light"] .trend-high {
+        background: rgba(244, 93, 120, 0.18);
+        color: #b91c1c;
+      }
+
+      [data-theme="light"] .table-wrapper {
+        border-color: var(--panel-border);
+      }
+
+      [data-theme="light"] table {
+        background: rgba(255, 255, 255, 0.96);
+      }
+
+      [data-theme="light"] th {
+        background: rgba(235, 241, 252, 0.95);
+        color: rgba(28, 42, 58, 0.75);
+        border-bottom-color: rgba(28, 51, 82, 0.18);
+      }
+
+      [data-theme="light"] tbody tr {
+        border-bottom-color: rgba(28, 51, 82, 0.1);
+      }
+
+      [data-theme="light"] tbody tr:hover {
+        background: rgba(220, 230, 245, 0.35);
+      }
+
+      [data-theme="light"] .tag-on {
+        background: rgba(15, 185, 129, 0.16);
+        color: #0f5132;
+      }
+
+      [data-theme="light"] .tag-off {
+        background: rgba(244, 93, 120, 0.18);
+        color: #8c1d2d;
+      }
+
+      [data-theme="light"] .tag-aggregated {
+        background: rgba(20, 125, 217, 0.12);
+        color: #0f2f4d;
+        border-color: rgba(20, 125, 217, 0.28);
+      }
+
+      [data-theme="light"] .metrics-sidebar {
+        background: rgba(255, 255, 255, 0.96);
+        border-right: 1px solid var(--panel-border);
+        box-shadow: 0 0 45px rgba(31, 50, 80, 0.1);
+      }
+
+      [data-theme="light"] .sidebar-toggle {
+        background: rgba(255, 255, 255, 0.92);
+        color: #1c2a3a;
+        border-color: var(--panel-border);
+      }
+
+      [data-theme="light"] .sidebar-toggle:hover {
+        background: rgba(20, 125, 217, 0.12);
+      }
+
+      [data-theme="light"] .metric-card {
+        background: rgba(255, 255, 255, 0.9);
+        border-color: rgba(28, 51, 82, 0.12);
+      }
+
+      [data-theme="light"] .comparison-select {
+        background-color: rgba(255, 255, 255, 0.92);
+        color: #1c2a3a;
+        border-color: rgba(28, 51, 82, 0.18);
+      }
+
+      [data-theme="light"] .comparison-results th {
+        color: rgba(28, 42, 58, 0.65);
+      }
+
+      [data-theme="light"] .comparison-results .winner {
+        color: #047857;
+        background-color: rgba(15, 185, 129, 0.12);
+      }
+
+      [data-theme="light"] .command-grid li {
+        background: rgba(255, 255, 255, 0.94);
+        border-color: var(--panel-border);
+      }
+
+      [data-theme="light"] .command-btn {
+        border-color: rgba(20, 125, 217, 0.2);
+        background: rgba(20, 125, 217, 0.14);
+        color: #0f2f4d;
+      }
+
+      [data-theme="light"] .command-btn:hover:not(:disabled) {
+        box-shadow: 0 12px 22px rgba(20, 125, 217, 0.18);
+      }
+
+      [data-theme="light"] .command-disabled {
+        background: rgba(240, 244, 255, 0.65);
+        border-style: dashed;
+        border-color: rgba(20, 125, 217, 0.22);
+      }
+
+      [data-theme="light"] .command-status {
+        color: rgba(28, 42, 58, 0.6);
+      }
+
+      [data-theme="light"] .quick-calculator {
+        background: linear-gradient(135deg, rgba(20, 125, 217, 0.16), rgba(15, 185, 181, 0.12)) !important;
+        border-color: rgba(20, 125, 217, 0.24) !important;
+      }
+
+      [data-theme="light"] .quick-calculator input {
+        background: rgba(255, 255, 255, 0.95) !important;
+        border-color: rgba(28, 51, 82, 0.16) !important;
+        color: var(--text-primary) !important;
+      }
+
+      [data-theme="light"] .quick-calculator input:focus {
+        border-color: rgba(20, 125, 217, 0.45) !important;
+      }
+
+      [data-theme="light"] .quick-calculator .calc-result {
+        background: rgba(255, 255, 255, 0.92) !important;
+        border-color: rgba(28, 51, 82, 0.12) !important;
+      }
+
+      [data-theme="light"] .quick-calculator .calc-result:nth-child(3) {
+        background: rgba(15, 185, 129, 0.14) !important;
+        border-color: rgba(15, 185, 129, 0.28) !important;
+      }
+
+      [data-theme="light"] .quick-calculator .calc-result div:first-child {
+        color: var(--text-muted) !important;
+      }
+
+      [data-theme="light"] .table-filters {
+        background: rgba(255, 255, 255, 0.92) !important;
+        border-color: rgba(28, 51, 82, 0.16) !important;
+      }
+
+      [data-theme="light"] #provider-search,
+      [data-theme="light"] #provider-status-filter,
+      [data-theme="light"] #provider-origin-filter {
+        background: rgba(255, 255, 255, 0.95) !important;
+        border-color: rgba(28, 51, 82, 0.16) !important;
+        color: var(--text-primary) !important;
+      }
+
+      [data-theme="light"] #provider-search:focus,
+      [data-theme="light"] #provider-status-filter:focus,
+      [data-theme="light"] #provider-origin-filter:focus {
+        border-color: rgba(20, 125, 217, 0.4) !important;
+      }
+
+      [data-theme="light"] #clear-filters-btn {
+        background: rgba(244, 93, 120, 0.12) !important;
+        border-color: rgba(244, 93, 120, 0.22) !important;
+        color: #8c1d2d !important;
+      }
+
+      [data-theme="light"] #clear-filters-btn:hover {
+        background: rgba(244, 93, 120, 0.18) !important;
+      }
+
+      [data-theme="light"] footer {
+        color: rgba(28, 42, 58, 0.55);
+      }
+
+      [data-theme="light"] ::-webkit-scrollbar-track {
+        background: rgba(230, 236, 245, 0.85);
+      }
+
+      [data-theme="light"] ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, rgba(20, 125, 217, 0.55), rgba(15, 185, 181, 0.55));
+      }
+
+      @media (max-width: 960px) {
+        header,
+        main,
+        footer {
+          width: calc(100% - 2rem);
+        }
+
+        .hero-banner {
+          grid-template-columns: 1fr;
+          padding: 1.6rem;
+        }
+
+        .hero-actions,
+        .insight-chips {
+          gap: 0.6rem;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .topbar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .last-update-indicator {
+          flex-wrap: wrap;
+          gap: 0.4rem;
+        }
+
+        .last-update-indicator strong {
+          display: inline-block;
+          min-width: 3rem;
+        }
+
+        .mini-refresh-btn {
+          margin-left: 0;
+          width: 100%;
+          justify-content: center;
+        }
+
+        .command-copy {
+          max-width: 100%;
+        }
+
+        .command-grid li {
+          padding: 0.9rem 1rem;
+        }
+
+        .section-heading {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+
+      @media (min-width: 920px) {
+        .responsive-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+    
+    
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment-timezone@0.5.43/builds/moment-timezone-with-data.min.js"></script>
+    
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-title">Cambio Dollar</span>
+        <span class="brand-subtitle">Mercado · Inteligencia</span>
+      </div>
+      <nav class="topbar-links">
+        <button
+          class="theme-toggle"
+          id="theme-toggle"
+          type="button"
+          aria-label="Cambiar tema"
+          aria-pressed="false"
+        >
+          <span data-theme-icon>🌙</span>
+          <span data-theme-label>Modo oscuro</span>
+        </button>
+        <a class="topbar-link" href="/api/consensus" target="_blank" rel="noopener">API JSON</a>
+      </nav>
+    </header>
+    <main>
+      
+<aside class="metrics-sidebar" id="metrics-sidebar">
+  <div class="sidebar-content">
+    <h3 class="sidebar-title">Métricas Clave</h3>
+    
+    <div class="metric-card">
+      <span class="metric-icon">📊</span>
+      <span class="metric-label">Operaciones del día</span>
+      <span class="metric-value">0</span>
+    </div>
+
+    <div class="metric-card">
+      <span class="metric-icon">💰</span>
+      <span class="metric-label">Ganancia de hoy</span>
+      <span class="metric-value">DOP 0.00</span>
+    </div>
+    
+    <div class="metric-card">
+      <span class="metric-icon">📈</span>
+      <span class="metric-label">Tendencia 24h</span>
+      
+        <span class="metric-value positive">
+          +0.454 DOP
+        </span>
+      
+    </div>
+    
+    <div class="metric-card">
+      <span class="metric-icon">⚡</span>
+      <span class="metric-label">Volatilidad 24h</span>
+      
+        <span class="metric-value">0.2749</span>
+      
+    </div>
+    
+    <div class="metric-card">
+      <span class="metric-icon">🏆</span>
+      <span class="metric-label">Mejor para vender USD</span>
+      
+        <span class="metric-value">RM</span>
+        <small class="metric-meta"> @ 63.80</small>
+      
+    </div>
+
+    <div class="metric-card">
+      <span class="metric-icon">🛒</span>
+      <span class="metric-label">Mejor para comprar USD</span>
+      
+        <span class="metric-value">RM</span>
+        <small class="metric-meta"> @ 64.05</small>
+      
+    </div>
+  </div>
+</aside>
+
+
+
+
+
+
+
+
+
+  
+    
+  
+
+
+<section class="hero-banner">
+  <div class="hero-intro">
+    <!-- Indicador de última actualización -->
+    <div class="last-update-indicator">
+      <span class="pulse-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite;"></span>
+      <span>Actualizado hace <strong id="time-ago" style="color: var(--accent-cyan);">—</strong></span>
+      <button id="sidebar-toggle" class="mini-refresh-btn" style="margin-left: 0.5rem;">
+        📊 Métricas
+      </button>
+      <button id="manual-refresh-btn" class="mini-refresh-btn">
+        🔄 Refrescar ahora
+      </button>
+    </div>
+    
+    <h1 class="hero-title">Centro de control USD/DOP</h1>
+    <p class="hero-summary">
+      
+        Seguimiento en tiempo real al consenso del mercado: mid 63.85 DOP,
+        divergencia 0.950 y 31/31 proveedores activos.
+      
+    </p>
+    <div class="insight-chips">
+      
+        <span class="chip chip-positive">📊 Mid 63.85 DOP</span>
+      
+      <span class="chip chip-neutral">
+        
+          ⚠️ Drift LOW · 1.30×
+        
+      </span>
+      <span class="chip chip-positive" id="coverage-chip">
+        🔌 31/31 activos (100.0%)
+      </span>
+      
+        <span class="chip chip-neutral">🤖 Forecast ±589.50 DOP</span>
+      
+    </div>
+    <div class="hero-actions">
+      <button
+        class="command-btn hero-action"
+        data-command="fetch"
+        data-endpoint="/api/capture"
+        data-method="POST"
+        data-status-target="#hero-status"
+      >
+        ⚡ Capturar mercado
+      </button>
+      <button
+        class="command-btn hero-action hero-action--secondary"
+        data-command="analyze"
+        data-endpoint="/api/analyze"
+        data-method="POST"
+        data-status-target="#hero-status"
+      >
+        🤖 Recalcular estrategia
+      </button>
+      <a class="hero-action hero-action--link" href="/api/consensus" target="_blank" rel="noopener">
+        Ver API JSON
+      </a>
+    </div>
+    <p id="hero-status" class="hero-status hint"></p>
+  </div>
+  <div class="hero-stats">
+    <!-- Calculadora Rápida -->
+    <div class="quick-calculator" style="grid-column: 1 / -1; padding: 1.2rem; border-radius: 16px; background: linear-gradient(135deg, rgba(76, 195, 255, 0.15), rgba(93, 228, 214, 0.12)); border: 1px solid rgba(151, 217, 255, 0.25);">
+      <h4 style="margin: 0 0 1rem 0; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+        🧮 Calculadora Rápida
+        <span style="margin-left: auto; font-size: 0.75rem; font-weight: 400; color: var(--text-muted);">Cálculo instantáneo</span>
+      </h4>
+      <div style="display: grid; gap: 0.75rem;">
+        <input 
+          type="number" 
+          id="calc-amount" 
+          placeholder="Ingresa monto en USD..." 
+          min="0.01" 
+          step="0.01"
+          style="width: 100%; padding: 0.75rem; border-radius: 10px; border: 1px solid rgba(151, 217, 255, 0.25); background: rgba(9, 14, 24, 0.6); color: var(--text-primary); font-size: 0.95rem; transition: border-color 0.2s;"
+          onfocus="this.style.borderColor='rgba(76, 195, 255, 0.6)'"
+          onblur="this.style.borderColor='rgba(151, 217, 255, 0.25)'"
+        />
+        <div class="calc-results" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
+          <div class="calc-result" style="padding: 0.65rem; background: rgba(9, 14, 24, 0.5); border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.12);">
+            <div style="color: var(--text-muted); margin-bottom: 0.25rem; font-size: 0.75rem;">💵 Comprar</div>
+            <div id="calc-buy" style="font-weight: 600; font-size: 1.05rem; color: #4cc3ff;">—</div>
+          </div>
+          <div class="calc-result" style="padding: 0.65rem; background: rgba(9, 14, 24, 0.5); border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.12);">
+            <div style="color: var(--text-muted); margin-bottom: 0.25rem; font-size: 0.75rem;">💸 Vender</div>
+            <div id="calc-sell" style="font-weight: 600; font-size: 1.05rem; color: #5de4d6;">—</div>
+          </div>
+          <div class="calc-result" style="padding: 0.65rem; background: rgba(121, 255, 183, 0.08); border-radius: 8px; border: 1px solid rgba(121, 255, 183, 0.25);">
+            <div style="color: var(--text-muted); margin-bottom: 0.25rem; font-size: 0.75rem;">📈 Ganancia</div>
+            <div id="calc-profit" style="font-weight: 600; font-size: 1.05rem; color: #10b981;">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-stat-card">
+      <span class="hero-stat-label">Acción sugerida</span>
+      <span class="hero-stat-value">
+        BUY
+      </span>
+      <span class="hero-stat-meta">
+        Confianza 46%
+      </span>
+    </div>
+    <div class="hero-stat-card">
+      <span class="hero-stat-label">Ganancia esperada</span>
+      <span class="hero-stat-value">
+        2100.00 DOP
+      </span>
+      <span class="hero-stat-meta">
+        Ventaja 1.168
+      </span>
+    </div>
+    <div class="hero-stat-card">
+      <span class="hero-stat-label">Próximo forecast</span>
+      <span class="hero-stat-value">
+        
+          -4438945530.62 DOP
+        
+      </span>
+      <span class="hero-stat-meta">
+        
+          Mejor -4438945235.87 · Peor -4438945825.36
+        
+      </span>
+    </div>
+  </div>
+</section>
+
+<!-- Sección de Gráfico de Tendencia -->
+<section class="card accent" style="margin-bottom: 2rem;">
+  <div class="card-header">
+    <div>
+      <h2 class="card-title">📈 Tendencia de Tasas (Últimas 24h)</h2>
+      <p style="margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--text-muted);">
+        Visualización histórica del comportamiento del mercado USD/DOP
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+      <button class="chart-period-btn live-btn" data-hours="0.5" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; animation: pulse-live 2s infinite;">LIVE</button>
+      <button class="chart-period-btn" data-hours="6" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(76, 195, 255, 0.1); color: #dcf6ff; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;">6h</button>
+      <button class="chart-period-btn" data-hours="12" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(76, 195, 255, 0.1); color: #dcf6ff; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;">12h</button>
+      <button class="chart-period-btn active" data-hours="24" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.4); background: rgba(76, 195, 255, 0.25); color: #dcf6ff; font-size: 0.8rem; cursor: pointer; font-weight: 600; transition: all 0.2s;">24h</button>
+      <button class="chart-period-btn" data-hours="48" style="padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(76, 195, 255, 0.1); color: #dcf6ff; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;">48h</button>
+    </div>
+  </div>
+  
+  <div style="position: relative; height: 300px; margin-top: 1rem;">
+    <canvas id="trend-chart" width="800" height="300"></canvas>
+  </div>
+  
+  <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(151, 217, 255, 0.14); display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; font-size: 0.85rem;">
+    <div>
+      <div style="color: var(--text-muted); margin-bottom: 0.25rem;">Promedio Compra</div>
+      <div id="chart-avg-buy" style="font-size: 1.1rem; font-weight: 600; color: #4cc3ff;">—</div>
+    </div>
+    <div>
+      <div style="color: var(--text-muted); margin-bottom: 0.25rem;">Promedio Venta</div>
+      <div id="chart-avg-sell" style="font-size: 1.1rem; font-weight: 600; color: #5de4d6;">—</div>
+    </div>
+    <div>
+      <div style="color: var(--text-muted); margin-bottom: 0.25rem;">Volatilidad</div>
+      <div id="chart-volatility" style="font-size: 1.1rem; font-weight: 600; color: #ffc961;">—</div>
+    </div>
+    <div>
+      <div style="color: var(--text-muted); margin-bottom: 0.25rem;">Tendencia</div>
+      <div id="chart-trend" style="font-size: 1.1rem; font-weight: 600;">—</div>
+    </div>
+  </div>
+</section>
+
+<section class="card-grid highlight-grid">
+  <article class="card accent data-card">
+    <header class="card-header card-header--stacked">
+      <div>
+        <span class="pill">Consenso</span>
+        <h3 class="card-title">Condiciones actuales</h3>
+      </div>
+      <span class="timestamp">2025-10-25 12:56</span>
+    </header>
+    
+      <div class="stat-grid">
+        <div class="stat-block">
+          <span class="stat-label">Compra</span>
+          <span class="stat-value">63.35</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">Venta</span>
+          <span class="stat-value">64.35</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">Mid ponderado</span>
+          <span class="stat-value">
+            63.70
+          </span>
+        </div>
+      </div>
+      <div class="stat-foot">
+        <span>Divergencia <strong>0.950</strong></span>
+        
+          <span class="trend-badge trend-low">
+            ↓ LOW
+          </span>
+        
+      </div>
+    
+  </article>
+
+  <article class="card accent success data-card">
+    <header class="card-header card-header--stacked">
+      <div>
+        <span class="pill pill-success">IA</span>
+        <h3 class="card-title">Recomendación activa</h3>
+      </div>
+      <span class="timestamp">2025-10-25 12:57</span>
+    </header>
+    <div class="stat-grid">
+      <div class="stat-block stat-block--highlight">
+        <span class="stat-label">Acción</span>
+        <span class="stat-value">BUY</span>
+      </div>
+      <div class="stat-block">
+        <span class="stat-label">Confianza</span>
+        <span class="stat-value">46%</span>
+      </div>
+      <div class="stat-block">
+        <span class="stat-label">Profit esperado</span>
+        <span class="stat-value">2100.00 DOP</span>
+      </div>
+    </div>
+    <ul class="mini-list mini-list--bullets">
+      <li>Compra sugerida <strong>61.97</strong></li>
+      <li>Venta sugerida <strong>64.53</strong></li>
+      <li>Ventaja vs mercado <strong>1.168</strong></li>
+    </ul>
+    <div class="reason-details">
+      <p class="reason">Tendencia alcista y spread neto suficiente. Oportunidad de compra.</p>
+      
+        <ul class="mini-list mini-list--bullets">
+          <li>Momentum: <strong>+0.0000</strong></li>
+          <li>Volatilidad: <strong>0.0071</strong></li>
+          <li>Spread Neto: <strong>2.1000</strong></li>
+          <li>Ventaja Spread: <strong>+1.1684</strong></li>
+        </ul>
+      
+    </div>
+  </article>
+
+  <article class="card accent forecast data-card">
+    <header class="card-header card-header--stacked">
+      <div>
+        <span class="pill pill-info">Forecast</span>
+        <h3 class="card-title">Escenarios de cierre</h3>
+      </div>
+      <span class="timestamp">2025-10-25 12:57</span>
+    </header>
+    
+      <div class="stat-grid">
+        <div class="stat-block">
+          <span class="stat-label">Esperado</span>
+          <span class="stat-value">-4438945530.62</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">Mejor caso</span>
+          <span class="stat-value">-4438945235.87</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">Peor caso</span>
+          <span class="stat-value">-4438945825.36</span>
+        </div>
+      </div>
+      <div class="stat-foot">
+        Intervalo ±589.50 DOP · Regresión lineal sobre las últimas 12 observaciones para estimar la variación del tipo de cambio.
+      </div>
+    
+  </article>
+
+  <article class="card data-card">
+    <header class="card-header card-header--stacked">
+      <div>
+        <span class="pill">Scheduler</span>
+        <h3 class="card-title">Capturas automáticas</h3>
+      </div>
+      <span class="timestamp">Intervalo 300 s</span>
+    </header>
+    <ul class="mini-list">
+      <li>Estado
+        <span class="status-dot status-dot--ok">
+          Activo
+        </span>
+      </li>
+      <li>Última corrida · 2025-10-25T12:56:24.133518-04:00</li>
+      <li>Última exitosa · 2025-10-25T12:56:36.212050-04:00</li>
+      
+    </ul>
+    <div class="progress-track">
+      <div
+        class="progress-value"
+        style="--progress: 100%;"
+      ></div>
+    </div>
+    <button
+      class="primary-btn command-btn"
+      data-command="fetch"
+      data-endpoint="/api/capture"
+      data-method="POST"
+      data-status-target="#capture-msg"
+    >
+      Capturar ahora
+    </button>
+    <p id="capture-msg" class="hint"></p>
+  </article>
+</section>
+
+<section class="card">
+  <header class="section-heading">
+    <div>
+      <h2>Estado de proveedores</h2>
+      <p>Monitorea cobertura y frescura de cada fuente de datos.</p>
+    </div>
+    <span class="chip chip-positive" id="coverage-chip-secondary">
+      🔌 31/31 activos (100.0%)
+    </span>
+  </header>
+  
+  <!-- Filtros de tabla -->
+  <div class="table-filters" style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; padding: 1rem; background: rgba(9, 14, 24, 0.4); border-radius: 12px; border: 1px solid rgba(151, 217, 255, 0.12);">
+    <div style="flex: 1; min-width: 200px;">
+      <label style="display: block; margin-bottom: 0.4rem; font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">🔍 Buscar proveedor</label>
+      <input 
+        type="text" 
+        id="provider-search" 
+        placeholder="Escribe nombre..." 
+        style="width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(6, 12, 22, 0.6); color: var(--text-primary); font-size: 0.9rem; transition: border-color 0.2s;"
+        onfocus="this.style.borderColor='rgba(76, 195, 255, 0.5)'"
+        onblur="this.style.borderColor='rgba(151, 217, 255, 0.2)'"
+      />
+    </div>
+    
+    <div style="flex: 0 0 150px;">
+      <label style="display: block; margin-bottom: 0.4rem; font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">📊 Estado</label>
+      <select 
+        id="provider-status-filter" 
+        style="width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(6, 12, 22, 0.6); color: var(--text-primary); font-size: 0.9rem; cursor: pointer;"
+      >
+        <option value="all">Todos</option>
+        <option value="active">Solo activos</option>
+        <option value="inactive">Solo inactivos</option>
+      </select>
+    </div>
+    
+    <div style="flex: 0 0 150px;">
+      <label style="display: block; margin-bottom: 0.4rem; font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">🏢 Origen</label>
+      <select 
+        id="provider-origin-filter" 
+        style="width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid rgba(151, 217, 255, 0.2); background: rgba(6, 12, 22, 0.6); color: var(--text-primary); font-size: 0.9rem; cursor: pointer;"
+      >
+        <option value="all">Todos</option>
+        <option value="directo">Directo</option>
+        <option value="infodolar">InfoDolar</option>
+        <option value="agregado">Agregado</option>
+      </select>
+    </div>
+    
+    <div style="flex: 0; display: flex; align-items: flex-end;">
+      <button 
+        id="clear-filters-btn" 
+        style="padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid rgba(255, 119, 104, 0.3); background: rgba(255, 119, 104, 0.15); color: #ffc1c1; font-size: 0.85rem; cursor: pointer; font-weight: 600; transition: all 0.2s; white-space: nowrap;"
+        onmouseover="this.style.background='rgba(255, 119, 104, 0.25)'"
+        onmouseout="this.style.background='rgba(255, 119, 104, 0.15)'"
+      >
+        🔄 Limpiar
+      </button>
+    </div>
+    
+    <div style="flex: 1 0 100%; margin-top: 0.5rem;">
+      <span id="filter-results-count" style="font-size: 0.85rem; color: var(--text-muted);">
+        Mostrando <strong id="visible-count">31</strong> de <strong>31</strong> proveedores
+      </span>
+    </div>
+  </div>
+  
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Proveedor</th>
+          <th>Habilitado</th>
+          <th>Origen</th>
+          <th>Compra</th>
+          <th>Venta</th>
+          <th>Actualización</th>
+        </tr>
+      </thead>
+      <tbody id="provider-table-body">
+        
+          <tr>
+            <td>Banco Central RD</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                Directo
+              
+            </td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+        
+          <tr>
+            <td>Banreservas</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                Directo
+              
+            </td>
+            <td>62.30</td>
+            <td>64.30</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Banco Central RD API v2</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                Directo
+              
+            </td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+        
+          <tr>
+            <td>Banco Popular</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                Directo
+              
+            </td>
+            <td>62.05</td>
+            <td>64.40</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>InfoDolar</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">Agregado</span>
+              
+            </td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+        
+          <tr>
+            <td>Remesas Caribe</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                Directo
+              
+            </td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+        
+          <tr>
+            <td>Capla</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                Directo
+              
+            </td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+        
+          <tr>
+            <td>Cambio Extranjero</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                Directo
+              
+            </td>
+            <td>63.71</td>
+            <td>64.19</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Asociación Romana</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                Directo
+              
+            </td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+        
+          <tr>
+            <td>Panora Exchange</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.75</td>
+            <td>64.45</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Bonanza Banco</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.40</td>
+            <td>64.40</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Banesco</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>62.50</td>
+            <td>64.40</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Banco Lafise</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>62.40</td>
+            <td>64.40</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Banco Vimenca</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.00</td>
+            <td>64.40</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Banco BHD</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>62.35</td>
+            <td>64.40</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>SCT</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.70</td>
+            <td>64.40</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Asociación Cibao de Ahorros y Préstamos</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.40</td>
+            <td>64.40</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Asociación Popular de Ahorros y Préstamos</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>62.25</td>
+            <td>64.35</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Asociación Duarte</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.35</td>
+            <td>64.35</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Asociación La Nacional de Ahorros y Préstamos</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.35</td>
+            <td>64.35</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Alaver</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.35</td>
+            <td>64.35</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Banco Unión</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.00</td>
+            <td>64.35</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Abonap</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>62.60</td>
+            <td>64.31</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Banco Caribe</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.30</td>
+            <td>64.30</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Moneycorps</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.70</td>
+            <td>64.30</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Motor Crédito</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.35</td>
+            <td>64.25</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Girosol</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.20</td>
+            <td>64.25</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Gamelin</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.40</td>
+            <td>64.20</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Asociación Peravia de Ahorros y Préstamos</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>62.15</td>
+            <td>64.15</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>RM</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.80</td>
+            <td>64.05</td>
+            <td>2025-10-25 12:56</td>
+          </tr>
+        
+          <tr>
+            <td>Taveras</td>
+            <td>
+              <span class="tag tag-on">
+                Sí
+              </span>
+            </td>
+            <td>
+              
+                <span class="tag tag-aggregated">InfoDolar</span>
+              
+            </td>
+            <td>63.80</td>
+            <td>64.25</td>
+            <td>2025-10-23 11:45</td>
+          </tr>
+        
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- MEJORA 8: MODO COMPARACIÓN DE PROVEEDORES -->
+<section class="card">
+  <header class="section-heading">
+    <div>
+      <h2>⚖️ Comparar Proveedores</h2>
+      <p>Selecciona dos proveedores para ver una comparación directa de sus tasas.</p>
+    </div>
+  </header>
+  <div class="provider-comparison">
+    <div class="comparison-selector">
+      <select id="provider-1" class="comparison-select">
+        <option value="">Seleccionar Proveedor 1</option>
+        
+          <option value="Banco Central RD">Banco Central RD</option>
+        
+          <option value="Banreservas">Banreservas</option>
+        
+          <option value="Banco Central RD API v2">Banco Central RD API v2</option>
+        
+          <option value="Banco Popular">Banco Popular</option>
+        
+          <option value="InfoDolar">InfoDolar</option>
+        
+          <option value="Remesas Caribe">Remesas Caribe</option>
+        
+          <option value="Capla">Capla</option>
+        
+          <option value="Cambio Extranjero">Cambio Extranjero</option>
+        
+          <option value="Asociación Romana">Asociación Romana</option>
+        
+          <option value="Panora Exchange">Panora Exchange</option>
+        
+          <option value="Bonanza Banco">Bonanza Banco</option>
+        
+          <option value="Banesco">Banesco</option>
+        
+          <option value="Banco Lafise">Banco Lafise</option>
+        
+          <option value="Banco Vimenca">Banco Vimenca</option>
+        
+          <option value="Banco BHD">Banco BHD</option>
+        
+          <option value="SCT">SCT</option>
+        
+          <option value="Asociación Cibao de Ahorros y Préstamos">Asociación Cibao de Ahorros y Préstamos</option>
+        
+          <option value="Asociación Popular de Ahorros y Préstamos">Asociación Popular de Ahorros y Préstamos</option>
+        
+          <option value="Asociación Duarte">Asociación Duarte</option>
+        
+          <option value="Asociación La Nacional de Ahorros y Préstamos">Asociación La Nacional de Ahorros y Préstamos</option>
+        
+          <option value="Alaver">Alaver</option>
+        
+          <option value="Banco Unión">Banco Unión</option>
+        
+          <option value="Abonap">Abonap</option>
+        
+          <option value="Banco Caribe">Banco Caribe</option>
+        
+          <option value="Moneycorps">Moneycorps</option>
+        
+          <option value="Motor Crédito">Motor Crédito</option>
+        
+          <option value="Girosol">Girosol</option>
+        
+          <option value="Gamelin">Gamelin</option>
+        
+          <option value="Asociación Peravia de Ahorros y Préstamos">Asociación Peravia de Ahorros y Préstamos</option>
+        
+          <option value="RM">RM</option>
+        
+          <option value="Taveras">Taveras</option>
+        
+      </select>
+      <span class="vs-badge">VS</span>
+      <select id="provider-2" class="comparison-select">
+        <option value="">Seleccionar Proveedor 2</option>
+        
+          <option value="Banco Central RD">Banco Central RD</option>
+        
+          <option value="Banreservas">Banreservas</option>
+        
+          <option value="Banco Central RD API v2">Banco Central RD API v2</option>
+        
+          <option value="Banco Popular">Banco Popular</option>
+        
+          <option value="InfoDolar">InfoDolar</option>
+        
+          <option value="Remesas Caribe">Remesas Caribe</option>
+        
+          <option value="Capla">Capla</option>
+        
+          <option value="Cambio Extranjero">Cambio Extranjero</option>
+        
+          <option value="Asociación Romana">Asociación Romana</option>
+        
+          <option value="Panora Exchange">Panora Exchange</option>
+        
+          <option value="Bonanza Banco">Bonanza Banco</option>
+        
+          <option value="Banesco">Banesco</option>
+        
+          <option value="Banco Lafise">Banco Lafise</option>
+        
+          <option value="Banco Vimenca">Banco Vimenca</option>
+        
+          <option value="Banco BHD">Banco BHD</option>
+        
+          <option value="SCT">SCT</option>
+        
+          <option value="Asociación Cibao de Ahorros y Préstamos">Asociación Cibao de Ahorros y Préstamos</option>
+        
+          <option value="Asociación Popular de Ahorros y Préstamos">Asociación Popular de Ahorros y Préstamos</option>
+        
+          <option value="Asociación Duarte">Asociación Duarte</option>
+        
+          <option value="Asociación La Nacional de Ahorros y Préstamos">Asociación La Nacional de Ahorros y Préstamos</option>
+        
+          <option value="Alaver">Alaver</option>
+        
+          <option value="Banco Unión">Banco Unión</option>
+        
+          <option value="Abonap">Abonap</option>
+        
+          <option value="Banco Caribe">Banco Caribe</option>
+        
+          <option value="Moneycorps">Moneycorps</option>
+        
+          <option value="Motor Crédito">Motor Crédito</option>
+        
+          <option value="Girosol">Girosol</option>
+        
+          <option value="Gamelin">Gamelin</option>
+        
+          <option value="Asociación Peravia de Ahorros y Préstamos">Asociación Peravia de Ahorros y Préstamos</option>
+        
+          <option value="RM">RM</option>
+        
+          <option value="Taveras">Taveras</option>
+        
+      </select>
+    </div>
+    <div class="comparison-results" id="comparison-results-container">
+      <!-- Los resultados se insertarán aquí vía JS -->
+      <div class="empty-state-small">
+        <p>Selecciona dos proveedores para iniciar la comparación.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card responsive-grid">
+  <div>
+    <header class="section-heading">
+      <h2>Snapshots recientes</h2>
+      <p>Lecturas crudas de cada proveedor en la ventana seleccionada.</p>
+    </header>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Proveedor</th>
+            <th>Compra</th>
+            <th>Venta</th>
+            <th>Confianza</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Panora Exchange</td>
+              <td>63.75</td>
+              <td>64.45</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Bonanza Banco</td>
+              <td>63.40</td>
+              <td>64.40</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Banesco</td>
+              <td>62.50</td>
+              <td>64.40</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Banco Popular</td>
+              <td>62.05</td>
+              <td>64.40</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Banco Lafise</td>
+              <td>62.40</td>
+              <td>64.40</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Banco Vimenca</td>
+              <td>63.00</td>
+              <td>64.40</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Banco BHD</td>
+              <td>62.35</td>
+              <td>64.40</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>SCT</td>
+              <td>63.70</td>
+              <td>64.40</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Asociación Cibao de Ahorros y Préstamos</td>
+              <td>63.40</td>
+              <td>64.40</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Asociación Popular de Ahorros y Préstamos</td>
+              <td>62.25</td>
+              <td>64.35</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Asociación Duarte</td>
+              <td>63.35</td>
+              <td>64.35</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Asociación La Nacional de Ahorros y Préstamos</td>
+              <td>63.35</td>
+              <td>64.35</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Alaver</td>
+              <td>63.35</td>
+              <td>64.35</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Banco Unión</td>
+              <td>63.00</td>
+              <td>64.35</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Abonap</td>
+              <td>62.60</td>
+              <td>64.31</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Banco Caribe</td>
+              <td>63.30</td>
+              <td>64.30</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Banreservas</td>
+              <td>62.30</td>
+              <td>64.30</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Moneycorps</td>
+              <td>63.70</td>
+              <td>64.30</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Motor Crédito</td>
+              <td>63.35</td>
+              <td>64.25</td>
+              <td>0.90</td>
+            </tr>
+          
+            <tr>
+              <td>2025-10-25 12:56</td>
+              <td>Girosol</td>
+              <td>63.20</td>
+              <td>64.25</td>
+              <td>0.90</td>
+            </tr>
+          
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <header class="section-heading">
+      <h2>Recomendaciones recientes</h2>
+      <p>Historial corto para validar consistencia del motor IA.</p>
+    </header>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Acción</th>
+            <th>Confianza</th>
+            <th>Profit (DOP)</th>
+            <th>Ventaja</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+            <tr>
+              <td>12:57</td>
+              <td>BUY</td>
+              <td>46%</td>
+              <td>2100.00</td>
+              <td>1.168</td>
+            </tr>
+          
+            <tr>
+              <td>12:57</td>
+              <td>BUY</td>
+              <td>46%</td>
+              <td>2100.00</td>
+              <td>1.168</td>
+            </tr>
+          
+            <tr>
+              <td>12:56</td>
+              <td>BUY</td>
+              <td>46%</td>
+              <td>2100.00</td>
+              <td>1.168</td>
+            </tr>
+          
+            <tr>
+              <td>12:53</td>
+              <td>BUY</td>
+              <td>46%</td>
+              <td>2100.00</td>
+              <td>1.168</td>
+            </tr>
+          
+            <tr>
+              <td>12:50</td>
+              <td>BUY</td>
+              <td>46%</td>
+              <td>2100.00</td>
+              <td>1.168</td>
+            </tr>
+          
+            <tr>
+              <td>12:47</td>
+              <td>BUY</td>
+              <td>46%</td>
+              <td>2100.00</td>
+              <td>1.168</td>
+            </tr>
+          
+            <tr>
+              <td>12:41</td>
+              <td>BUY</td>
+              <td>46%</td>
+              <td>2100.00</td>
+              <td>1.168</td>
+            </tr>
+          
+            <tr>
+              <td>12:41</td>
+              <td>BUY</td>
+              <td>46%</td>
+              <td>2100.00</td>
+              <td>1.168</td>
+            </tr>
+          
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <header class="section-heading">
+      <h2>Historial de Operaciones</h2>
+      <a href="/api/export/trades.csv" class="command-btn hero-action--secondary" style="text-decoration: none; font-size: 0.8rem; padding: 0.4rem 0.8rem;">📥 Exportar Todos</a>
+    </header>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Acción</th>
+            <th>USD</th>
+            <th>Tasa</th>
+            <th>Profit (DOP)</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+            <tr>
+              <td colspan="6" class="empty-state">Sin operaciones registradas.</td>
+            </tr>
+          
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <header class="section-heading">
+    <div>
+      <h2>Eventos de drift recientes</h2>
+      <p>Vigilancia de cambios de régimen detectados por EWMA + CUSUM.</p>
+    </div>
+  </header>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Dirección</th>
+          <th>Métrica</th>
+          <th>Valor</th>
+          <th>EWMA</th>
+          <th>Umbral</th>
+          <th>Severidad</th>
+          <th>Intensidad</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+          
+            
+            <tr>
+              <td>2025-10-24 09:04</td>
+              <td>↓ DOWN</td>
+              <td>weighted_mid_rate</td>
+              <td>60.681</td>
+              <td>60.848</td>
+              <td>1.500</td>
+              <td>
+                <span class="tag tag-low">LOW</span>
+              </td>
+              <td>1.30</td>
+            </tr>
+          
+            
+            <tr>
+              <td>2025-10-24 08:49</td>
+              <td>↓ DOWN</td>
+              <td>weighted_mid_rate</td>
+              <td>60.679</td>
+              <td>60.997</td>
+              <td>1.500</td>
+              <td>
+                <span class="tag tag-medium">MEDIUM</span>
+              </td>
+              <td>2.21</td>
+            </tr>
+          
+            
+            <tr>
+              <td>2025-10-24 08:34</td>
+              <td>↓ DOWN</td>
+              <td>weighted_mid_rate</td>
+              <td>60.679</td>
+              <td>61.300</td>
+              <td>1.500</td>
+              <td>
+                <span class="tag tag-high">HIGH</span>
+              </td>
+              <td>3.21</td>
+            </tr>
+          
+            
+            <tr>
+              <td>2025-10-24 08:19</td>
+              <td>↓ DOWN</td>
+              <td>weighted_mid_rate</td>
+              <td>60.677</td>
+              <td>61.893</td>
+              <td>1.500</td>
+              <td>
+                <span class="tag tag-high">HIGH</span>
+              </td>
+              <td>3.65</td>
+            </tr>
+          
+            
+            <tr>
+              <td>2025-10-24 08:04</td>
+              <td>↓ DOWN</td>
+              <td>weighted_mid_rate</td>
+              <td>60.677</td>
+              <td>63.052</td>
+              <td>1.500</td>
+              <td>
+                <span class="tag tag-low">LOW</span>
+              </td>
+              <td>1.52</td>
+            </tr>
+          
+            
+            <tr>
+              <td>2025-10-23 21:24</td>
+              <td>↑ UP</td>
+              <td>weighted_mid_rate</td>
+              <td>63.646</td>
+              <td>63.458</td>
+              <td>1.500</td>
+              <td>
+                <span class="tag tag-low">LOW</span>
+              </td>
+              <td>1.36</td>
+            </tr>
+          
+        
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <header class="section-heading">
+    <div>
+      <h2>Guía rápida de comandos</h2>
+      <p>Lanza acciones críticas desde el panel sin abrir la terminal.</p>
+    </div>
+  </header>
+  <ul class="command-grid">
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make fetch</code>
+          <span>Captura nuevas cotizaciones y refresca el consenso.</span>
+        </div>
+        <button class="command-btn" data-command="fetch" data-endpoint="/api/capture" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make analyze</code>
+          <span>Calcula la recomendación de la estrategia con los últimos datos.</span>
+        </div>
+        <button class="command-btn" data-command="analyze" data-endpoint="/api/analyze" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make forecast</code>
+          <span>Proyecta el beneficio esperado al cierre del día.</span>
+        </div>
+        <button class="command-btn" data-command="forecast" data-endpoint="/api/forecast" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make compare</code>
+          <span>Revisa la divergencia entre proveedores en la última captura.</span>
+        </div>
+        <button class="command-btn" data-command="compare" data-endpoint="/api/compare" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make providers</code>
+          <span>Consulta el estado de cada proveedor configurado.</span>
+        </div>
+        <button class="command-btn" data-command="providers" data-endpoint="/api/providers/refresh" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make trade</code>
+          <span>Registra una operación de compra o venta en el sistema.</span>
+        </div>
+        <button class="command-btn" data-command="trade-form" data-action="show-form">📝 Abrir formulario</button>
+      </div>
+      
+      <!-- Formulario de Trade Mejorado -->
+      <div id="trade-form" style="display: none; margin-top: 1.5rem;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1.5rem; border-radius: 12px 12px 0 0; color: white;">
+          <h3 style="margin: 0 0 0.5rem 0; font-size: 1.25rem; font-weight: 600;">💰 Registrar Operación</h3>
+          <p style="margin: 0; opacity: 0.9; font-size: 0.875rem;">Completa los datos de tu operación de cambio USD/DOP</p>
+        </div>
+        
+        <div style="background: white; padding: 1.5rem; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.07);">
+          <!-- Selector de Acción Destacado -->
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.75rem; font-size: 0.875rem; font-weight: 600; color: #374151;">
+              Tipo de operación
+            </label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+              <label class="trade-action-option" style="position: relative; cursor: pointer;">
+                <input type="radio" name="trade-action-radio" value="buy" style="position: absolute; opacity: 0;">
+                <div class="trade-action-card" style="padding: 1rem; border: 2px solid #e5e7eb; border-radius: 8px; text-align: center; transition: all 0.2s;">
+                  <div style="font-size: 2rem; margin-bottom: 0.5rem;">💵</div>
+                  <div style="font-weight: 600; color: #10b981; margin-bottom: 0.25rem;">COMPRAR USD</div>
+                  <div style="font-size: 0.75rem; color: #6b7280;">Adquirir dólares</div>
+                </div>
+              </label>
+              <label class="trade-action-option" style="position: relative; cursor: pointer;">
+                <input type="radio" name="trade-action-radio" value="sell" checked style="position: absolute; opacity: 0;">
+                <div class="trade-action-card trade-action-selected" style="padding: 1rem; border: 2px solid #667eea; border-radius: 8px; text-align: center; transition: all 0.2s; background: #f0f4ff;">
+                  <div style="font-size: 2rem; margin-bottom: 0.5rem;">💸</div>
+                  <div style="font-weight: 600; color: #667eea; margin-bottom: 0.25rem;">VENDER USD</div>
+                  <div style="font-size: 0.75rem; color: #6b7280;">Convertir a pesos</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Campos del formulario -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+            <div>
+              <label style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151;">
+                💵 Monto en USD <span style="color: #ef4444;">*</span>
+              </label>
+              <input 
+                type="number" 
+                id="trade-amount" 
+                placeholder="Ej: 500" 
+                min="0.01" 
+                step="0.01" 
+                required
+                style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; transition: border-color 0.2s;"
+                onfocus="this.style.borderColor='#667eea'"
+                onblur="this.style.borderColor='#e5e7eb'"
+              />
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151;">
+                💱 Tasa DOP/USD <span style="color: #9ca3af; font-weight: 400;">(opcional)</span>
+              </label>
+              <input 
+                type="number" 
+                id="trade-rate" 
+                placeholder="Usar consenso actual" 
+                min="0.01" 
+                step="0.01"
+                style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; transition: border-color 0.2s;"
+                onfocus="this.style.borderColor='#667eea'"
+                onblur="this.style.borderColor='#e5e7eb'"
+              />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151;">
+              💳 Comisiones en DOP <span style="color: #9ca3af; font-weight: 400;">(opcional)</span>
+            </label>
+            <input 
+              type="number" 
+              id="trade-fees" 
+              placeholder="Usar configuración por defecto" 
+              min="0" 
+              step="0.01"
+              style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#667eea'"
+              onblur="this.style.borderColor='#e5e7eb'"
+            />
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #6b7280;">
+              💡 Tip: Si dejas los campos opcionales vacíos, se usarán los valores del consenso y configuración
+            </p>
+          </div>
+
+          <!-- Botones de acción -->
+          <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+            <button 
+              class="command-btn" 
+              id="trade-submit-btn" 
+              style="flex: 1; padding: 0.875rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: white; font-weight: 600; border-radius: 8px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;"
+              onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 44px 12px rgba(102, 126, 234, 0.4)'"
+              onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'"
+            >
+              ✅ Registrar operación
+            </button>
+            <button 
+              class="command-btn" 
+              onclick="document.getElementById('trade-form').style.display='none'; document.getElementById('trade-result').textContent=''"
+              style="flex: 0; padding: 0.875rem 1.5rem; background: #6b7280; border: none; color: white; font-weight: 600; border-radius: 8px; cursor: pointer; transition: background 0.2s;"
+              onmouseover="this.style.background='#4b5563'"
+              onmouseout="this.style.background='#6b7280'"
+            >
+              ❌ Cancelar
+            </button>
+          </div>
+
+          <!-- Área de resultado -->
+          <div id="trade-result" style="margin-top: 1rem; padding: 0; font-size: 0.875rem; line-height: 1.6; white-space: pre-line;"></div>
+        </div>
+      </div>
+      
+      <p class="command-status hint">Click en el botón para abrir el formulario interactivo de registro de operaciones.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make history</code>
+          <span>Muestra las operaciones registradas más recientes.</span>
+        </div>
+        <button class="command-btn" data-command="history" data-endpoint="/api/history?limit=10" data-method="POST">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li>
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make drift</code>
+          <span>Consulta los últimos eventos detectados por el monitor de drift.</span>
+        </div>
+        <button class="command-btn" data-command="drift" data-endpoint="/api/drift" data-method="GET">Ejecutar</button>
+      </div>
+      <p class="command-status hint">Listo para ejecutar.</p>
+    </li>
+    <li class="command-disabled">
+      <div class="command-row">
+        <div class="command-copy">
+          <code>make serve</code>
+          <span>Este panel ya está activo; reinícialo desde la terminal si lo necesitas.</span>
+        </div>
+        <button class="command-btn" disabled>En ejecución</button>
+      </div>
+      <p class="command-status hint">Administra el servicio desde la terminal.</p>
+    </li>
+  </ul>
+  <p class="hint">Tip: Usa <code>make fetch repetitions=3 interval=60</code> para tres capturas consecutivas cada minuto.</p>
+</section>
+
+    </main>
+    <footer>Panel experimental · Datos locales almacenados en SQLite</footer>
+    
+<script>
+  // Global variables for Jinja2 data
+  window.GLOBAL_CONSENSUS_TIMESTAMP = '2025-10-25 12:56:24.579640-04:00';
+  window.GLOBAL_CONSENSUS_BUY_RATE = 63.35;
+  window.GLOBAL_CONSENSUS_SELL_RATE = 64.35;
+  window.GLOBAL_PROVIDER_STATUS_JSON = [{"aggregated": false, "buy_rate": null, "confidence": null, "enabled": true, "endpoint": "https://api.exchangerate.host/latest?base=USD\u0026symbols=DOP", "last_timestamp": null, "name": "Banco Central RD", "origin": null, "sell_rate": null}, {"aggregated": false, "buy_rate": 62.3, "confidence": 0.9, "enabled": true, "endpoint": "https://open.er-api.com/v6/latest/USD", "last_timestamp": "2025-10-25T12:56:24.579222-04:00", "name": "Banreservas", "origin": null, "sell_rate": 64.3}, {"aggregated": false, "buy_rate": null, "confidence": null, "enabled": true, "endpoint": "https://apis.bancentral.gov.do/indicadoreseconomicos/api/v1/series/3540/valores?formato=json\u0026ultimos=1", "last_timestamp": null, "name": "Banco Central RD API v2", "origin": null, "sell_rate": null}, {"aggregated": false, "buy_rate": 62.05, "confidence": 0.9, "enabled": true, "endpoint": "https://api.us-east-a.apiconnect.ibmappdomain.cloud/apiportalpopular/bpdsandbox/consultatasa/consultaTasa", "last_timestamp": "2025-10-25T12:56:24.579563-04:00", "name": "Banco Popular", "origin": null, "sell_rate": 64.4}, {"aggregated": true, "buy_rate": null, "confidence": null, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": null, "name": "InfoDolar", "origin": null, "sell_rate": null}, {"aggregated": false, "buy_rate": null, "confidence": null, "enabled": true, "endpoint": "https://api.remesascache.com/v1/rates/USD/DOP", "last_timestamp": null, "name": "Remesas Caribe", "origin": null, "sell_rate": null}, {"aggregated": false, "buy_rate": null, "confidence": null, "enabled": true, "endpoint": null, "last_timestamp": null, "name": "Capla", "origin": null, "sell_rate": null}, {"aggregated": false, "buy_rate": 63.71, "confidence": 0.9, "enabled": true, "endpoint": null, "last_timestamp": "2025-10-25T12:56:24.579084-04:00", "name": "Cambio Extranjero", "origin": null, "sell_rate": 64.19}, {"aggregated": false, "buy_rate": null, "confidence": null, "enabled": true, "endpoint": null, "last_timestamp": null, "name": "Asociaci\u00f3n Romana", "origin": null, "sell_rate": null}, {"aggregated": true, "buy_rate": 63.75, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579640-04:00", "name": "Panora Exchange", "origin": "InfoDolar", "sell_rate": 64.45}, {"aggregated": true, "buy_rate": 63.4, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579614-04:00", "name": "Bonanza Banco", "origin": "InfoDolar", "sell_rate": 64.4}, {"aggregated": true, "buy_rate": 62.5, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579589-04:00", "name": "Banesco", "origin": "InfoDolar", "sell_rate": 64.4}, {"aggregated": true, "buy_rate": 62.4, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579536-04:00", "name": "Banco Lafise", "origin": "InfoDolar", "sell_rate": 64.4}, {"aggregated": true, "buy_rate": 63.0, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579510-04:00", "name": "Banco Vimenca", "origin": "InfoDolar", "sell_rate": 64.4}, {"aggregated": true, "buy_rate": 62.35, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579484-04:00", "name": "Banco BHD", "origin": "InfoDolar", "sell_rate": 64.4}, {"aggregated": true, "buy_rate": 63.7, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579458-04:00", "name": "SCT", "origin": "InfoDolar", "sell_rate": 64.4}, {"aggregated": true, "buy_rate": 63.4, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579431-04:00", "name": "Asociaci\u00f3n Cibao de Ahorros y Pr\u00e9stamos", "origin": "InfoDolar", "sell_rate": 64.4}, {"aggregated": true, "buy_rate": 62.25, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579405-04:00", "name": "Asociaci\u00f3n Popular de Ahorros y Pr\u00e9stamos", "origin": "InfoDolar", "sell_rate": 64.35}, {"aggregated": true, "buy_rate": 63.35, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579377-04:00", "name": "Asociaci\u00f3n Duarte", "origin": "InfoDolar", "sell_rate": 64.35}, {"aggregated": true, "buy_rate": 63.35, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579353-04:00", "name": "Asociaci\u00f3n La Nacional de Ahorros y Pr\u00e9stamos", "origin": "InfoDolar", "sell_rate": 64.35}, {"aggregated": true, "buy_rate": 63.35, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579325-04:00", "name": "Alaver", "origin": "InfoDolar", "sell_rate": 64.35}, {"aggregated": true, "buy_rate": 63.0, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579300-04:00", "name": "Banco Uni\u00f3n", "origin": "InfoDolar", "sell_rate": 64.35}, {"aggregated": true, "buy_rate": 62.6, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579274-04:00", "name": "Abonap", "origin": "InfoDolar", "sell_rate": 64.31}, {"aggregated": true, "buy_rate": 63.3, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579248-04:00", "name": "Banco Caribe", "origin": "InfoDolar", "sell_rate": 64.3}, {"aggregated": true, "buy_rate": 63.7, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579195-04:00", "name": "Moneycorps", "origin": "InfoDolar", "sell_rate": 64.3}, {"aggregated": true, "buy_rate": 63.35, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579168-04:00", "name": "Motor Cr\u00e9dito", "origin": "InfoDolar", "sell_rate": 64.25}, {"aggregated": true, "buy_rate": 63.2, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579139-04:00", "name": "Girosol", "origin": "InfoDolar", "sell_rate": 64.25}, {"aggregated": true, "buy_rate": 63.4, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579112-04:00", "name": "Gamelin", "origin": "InfoDolar", "sell_rate": 64.2}, {"aggregated": true, "buy_rate": 62.15, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.579055-04:00", "name": "Asociaci\u00f3n Peravia de Ahorros y Pr\u00e9stamos", "origin": "InfoDolar", "sell_rate": 64.15}, {"aggregated": true, "buy_rate": 63.8, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-25T12:56:24.578987-04:00", "name": "RM", "origin": "InfoDolar", "sell_rate": 64.05}, {"aggregated": true, "buy_rate": 63.8, "confidence": 0.9, "enabled": true, "endpoint": "https://www.infodolar.com.do/", "last_timestamp": "2025-10-23T11:45:30.827659-04:00", "name": "Taveras", "origin": "InfoDolar", "sell_rate": 64.25}];
+</script>
+<script src="/static/js/dashboard.js"></script>
+
+  </body>
+</html>

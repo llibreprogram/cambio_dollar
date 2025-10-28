@@ -1,0 +1,1 @@
+recursive-include src/cambio_dollar/web/templates *.html

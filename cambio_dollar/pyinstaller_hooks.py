@@ -1,0 +1,177 @@
+# Archivo de configuración adicional para PyInstaller
+# Este archivo contiene dependencias ocultas que PyInstaller podría no detectar automáticamente
+
+hidden_imports = [
+    # FastAPI y Starlette
+    'fastapi',
+    'fastapi.routing',
+    'fastapi.responses',
+    'fastapi.staticfiles',
+    'fastapi.templating',
+    'starlette.applications',
+    'starlette.routing',
+    'starlette.responses',
+    'starlette.staticfiles',
+    'starlette.templating',
+    'starlette.background',
+    'starlette.concurrency',
+
+    # Uvicorn
+    'uvicorn',
+    'uvicorn.config',
+    'uvicorn.server',
+    'uvicorn.supervisors',
+    'uvicorn.workers',
+    'uvicorn.logging',
+    'uvicorn.loops',
+    'uvicorn.loops.auto',
+    'uvicorn.protocols',
+    'uvicorn.protocols.http',
+    'uvicorn.protocols.http.auto',
+    'uvicorn.protocols.websockets',
+    'uvicorn.protocols.websockets.auto',
+
+    # SQLAlchemy
+    'sqlalchemy',
+    'sqlalchemy.engine',
+    'sqlalchemy.pool',
+    'sqlalchemy.dialects',
+    'sqlalchemy.dialects.sqlite',
+    'sqlalchemy.ext',
+    'sqlalchemy.ext.declarative',
+    'sqlalchemy.orm',
+    'sqlalchemy.orm.decl_api',
+    'sqlalchemy.orm.mapper',
+    'sqlalchemy.orm.relationships',
+    'sqlalchemy.orm.session',
+    'sqlalchemy.orm.query',
+    'sqlalchemy.orm.exc',
+    'sqlalchemy.exc',
+
+    # Alembic
+    'alembic',
+    'alembic.config',
+    'alembic.environment',
+    'alembic.migration',
+    'alembic.script',
+    'alembic.context',
+
+    # Pydantic
+    'pydantic',
+    'pydantic.main',
+    'pydantic.fields',
+    'pydantic.types',
+    'pydantic.validators',
+    'pydantic.v1',
+    'pydantic.v1.main',
+    'pydantic.v1.fields',
+    'pydantic.v1.types',
+    'pydantic.v1.validators',
+
+    # APScheduler
+    'apscheduler',
+    'apscheduler.schedulers',
+    'apscheduler.schedulers.asyncio',
+    'apscheduler.schedulers.background',
+    'apscheduler.jobstores',
+    'apscheduler.jobstores.memory',
+    'apscheduler.jobstores.sqlite',
+    'apscheduler.executors',
+    'apscheduler.executors.asyncio',
+    'apscheduler.executors.threadpool',
+    'apscheduler.triggers',
+    'apscheduler.triggers.interval',
+    'apscheduler.triggers.cron',
+    'apscheduler.triggers.date',
+
+    # Plotly
+    'plotly',
+    'plotly.graph_objects',
+    'plotly.subplots',
+    'plotly.offline',
+    'plotly.io',
+    'plotly.colors',
+    'plotly.figure_factory',
+
+    # Rich
+    'rich',
+    'rich.console',
+    'rich.panel',
+    'rich.table',
+    'rich.text',
+    'rich.columns',
+    'rich.progress',
+    'rich.spinner',
+
+    # HTTPX
+    'httpx',
+    'httpx._client',
+    'httpx._config',
+    'httpx._exceptions',
+    'httpx._models',
+    'httpx._transports',
+    'httpx._utils',
+
+    # Selectolax
+    'selectolax',
+    'selectolax.parser',
+
+    # Jinja2
+    'jinja2',
+    'jinja2.ext',
+    'jinja2.filters',
+    'jinja2.loaders',
+
+    # Módulos de cambio_dollar
+    'cambio_dollar',
+    'cambio_dollar.cli',
+    'cambio_dollar.web',
+    'cambio_dollar.web.app',
+    'cambio_dollar.web.routes',
+    'cambio_dollar.analytics',
+    'cambio_dollar.config',
+    'cambio_dollar.data_provider',
+    'cambio_dollar.forecast',
+    'cambio_dollar.logging_utils',
+    'cambio_dollar.models',
+    'cambio_dollar.repository',
+    'cambio_dollar.strategy',
+    'cambio_dollar.db_migrations',
+
+    # Módulos estándar que podrían faltar
+    'asyncio',
+    'concurrent.futures',
+    'concurrent.futures.thread',
+    'email.utils',
+    'html',
+    'html.parser',
+    'json',
+    'logging.config',
+    'pathlib',
+    'sqlite3',
+    'ssl',
+    'urllib.parse',
+    'urllib.request',
+    'uuid',
+    'xml.etree.ElementTree',
+]
+
+# Exclusiones para reducir el tamaño del ejecutable
+excludes = [
+    'tkinter',
+    'matplotlib',
+    'PIL',
+    'numpy.testing',
+    'pandas.tests',
+    'pytest',
+    'setuptools',
+    'pip',
+    'wheel',
+    'distutils',
+    'unittest',
+    'doctest',
+    'pdb',
+    'pydoc',
+    'test',
+    'tests',
+]
