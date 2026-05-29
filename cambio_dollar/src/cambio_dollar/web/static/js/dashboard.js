@@ -10,39 +10,18 @@
   }
 })();
 
-// Test script to check Chart.js loading
-(function() {
-  console.log('=== INICIO DE DEPURACIÓN ===');
-  console.log('Chart.js loaded:', typeof Chart);
-  console.log('Canvas exists:', !!document.getElementById('trend-chart'));
-  console.log('Document readyState:', document.readyState);
+// Variables globales del estado de la app
+let currentChartPeriod = 24;
+let isLiveMode = false;
+let liveUpdateInterval = null;
+let trendChart = null;
+let lastUpdateTimestamp = new Date();
+let eventSource = null;
 
-  // Verificar que las funciones existen
-  console.log('renderChart function exists:', typeof renderChart);
-  console.log('loadChartData function exists:', typeof loadChartData);
-  console.log('processChartData function exists:', typeof processChartData);
-  console.log('calculateStats function exists:', typeof calculateStats);
-
-  console.log('=== FIN DE DEPURACIÓN ===');
-})();
-
-// Función para enviar logs al servidor
-async function sendLog(message) {
-  try {
-    await fetch('/api/log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message })
-    });
-  } catch (error) {
-    console.error('Failed to send log:', error);
-  }
-}
-
-// Funciones de utilidad
+// Funciones de formateo y utilidad
 function fmtNumber(value, decimals = 2) {
-  if (value === null || value === undefined) return '—';
-  return Number(value).toFixed(decimals);
+  if (value === null || value === undefined || isNaN(value)) return '—';
+  return Number(value).toLocaleString('es-DO', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 function shortText(text, maxLength) {
@@ -57,533 +36,771 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function parseDate(dateStr) {
+  return dateStr ? new Date(dateStr) : new Date();
+}
+
 function updateTimeAgo(timestamp) {
   if (!timestamp) return '—';
-  
   const now = new Date();
   const diff = now - timestamp;
-  
   const seconds = Math.floor(diff / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
   
-  if (seconds < 60) return 'ahora mismo';
+  if (seconds < 10) return 'ahora mismo';
+  if (seconds < 60) return `hace ${seconds}s`;
   if (minutes < 60) return `hace ${minutes}m`;
   if (hours < 24) return `hace ${hours}h`;
   return `hace ${days}d`;
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('🚀 DOMContentLoaded EVENT FIRED - Dashboard initialization starting');
-  sendLog('🚀 DOMContentLoaded EVENT FIRED - Dashboard initialization starting');
+// Sistema de Toasts Premium
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
 
-  // Agregar indicador visual de que el JS se está ejecutando
-  const body = document.body;
-  body.style.backgroundColor = '#f0f8ff'; // Cambiar fondo para indicar que JS se ejecutó
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  
+  let icon = 'ℹ️';
+  if (type === 'success') icon = '✅';
+  else if (type === 'warning') icon = '⚠️';
+  else if (type === 'error') icon = '❌';
 
-  // Verificar elementos críticos inmediatamente
-  const canvas = document.getElementById('trend-chart');
-  console.log('Canvas element check:', { exists: !!canvas, id: canvas?.id });
-  sendLog('Canvas element check: ' + JSON.stringify({ exists: !!canvas, id: canvas?.id }));
+  toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+  container.appendChild(toast);
 
-  if (!canvas) {
-    console.error('❌ CRITICAL ERROR: Canvas #trend-chart not found!');
-    sendLog('❌ CRITICAL ERROR: Canvas #trend-chart not found!');
-    // Agregar mensaje visible en la página
-    const errorDiv = document.createElement('div');
-    errorDiv.textContent = 'ERROR: Canvas #trend-chart not found!';
-    errorDiv.style.color = 'red';
-    errorDiv.style.fontSize = '20px';
-    errorDiv.style.position = 'fixed';
-    errorDiv.style.top = '10px';
-    errorDiv.style.right = '10px';
-    errorDiv.style.zIndex = '9999';
-    document.body.appendChild(errorDiv);
-    return;
+  // Auto destruir
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-10px)';
+    toast.style.transition = 'opacity 0.3s, transform 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
+// Animación de actualización flash
+function animateValueChange(element, newValue, isNumeric = true, prefix = '', suffix = '') {
+  if (!element) return;
+  const oldText = element.textContent.trim();
+  const cleanNewVal = isNumeric ? fmtNumber(newValue) : newValue;
+  const newText = `${prefix}${cleanNewVal}${suffix}`;
+
+  if (oldText !== newText && oldText !== '—') {
+    element.textContent = newText;
+    
+    // Comparación numérica para color de flash
+    if (isNumeric) {
+      const oldNum = parseFloat(oldText.replace(/[^\d.-]/g, ''));
+      const newNum = parseFloat(newValue);
+      if (!isNaN(oldNum) && !isNaN(newNum)) {
+        if (newNum > oldNum) {
+          element.classList.remove('flash-green', 'flash-red');
+          void element.offsetWidth; // Trigger reflow
+          element.classList.add('flash-green');
+        } else if (newNum < oldNum) {
+          element.classList.remove('flash-green', 'flash-red');
+          void element.offsetWidth;
+          element.classList.add('flash-red');
+        }
+      }
+    } else {
+      element.classList.remove('flash-green');
+      void element.offsetWidth;
+      element.classList.add('flash-green');
+    }
+  } else {
+    element.textContent = newText;
+  }
+}
+
+// ============================================================================ 
+// Real-Time Server-Sent Events (SSE)
+// ============================================================================ 
+function initSSE() {
+  if (eventSource) {
+    eventSource.close();
   }
 
-  // Verificar Chart.js inmediatamente
-  console.log('Chart.js check:', { loaded: typeof Chart, version: Chart?.version });
-  sendLog('Chart.js check: ' + JSON.stringify({ loaded: typeof Chart, version: Chart?.version }));
+  console.log("🔌 Iniciando conexión SSE en /api/events...");
+  eventSource = new EventSource('/api/events');
 
-  if (typeof Chart === 'undefined') {
-    console.error('❌ CRITICAL ERROR: Chart.js not loaded!');
-    sendLog('❌ CRITICAL ERROR: Chart.js not loaded!');
-    // Agregar mensaje visible en la página
-    const errorDiv = document.createElement('div');
-    errorDiv.textContent = 'ERROR: Chart.js not loaded!';
-    errorDiv.style.color = 'red';
-    errorDiv.style.fontSize = '20px';
-    errorDiv.style.position = 'fixed';
-    errorDiv.style.top = '40px';
-    errorDiv.style.right = '10px';
-    errorDiv.style.zIndex = '9999';
-    document.body.appendChild(errorDiv);
-    return;
-  }
+  eventSource.onmessage = function (event) {
+    console.log("✉️ SSE evento recibido:", event.data);
+    if (event.data === "refresh") {
+      showToast("Actualización de mercado en tiempo real recibida", "success");
+      refreshDashboardData(true);
+    }
+  };
 
-  console.log('✅ All prerequisites met, proceeding with renderChart(24)');
-  sendLog('✅ All prerequisites met, proceeding with renderChart(24)');
-  console.log('Calling renderChart with hours=24');
-  sendLog('Calling renderChart with hours=24');
+  eventSource.onerror = function (error) {
+    console.warn("⚠️ Conexión SSE interrumpida. Reintentando...", error);
+    // reconecta automáticamente a través de la API del navegador
+  };
+}
 
-  // Cambiar color del canvas para indicar que renderChart se va a llamar
-  canvas.style.border = '2px solid blue';
+// ============================================================================ 
+// Refresco Dinámico de Datos (SPA sin recarga)
+// ============================================================================ 
+async function refreshDashboardData(updateChart = false) {
+  try {
+    // 1. Obtener Consenso
+    const resConsensus = await fetch('/api/consensus');
+    if (!resConsensus.ok) throw new Error("Error obteniendo consenso");
+    const consensus = await resConsensus.json();
+    lastUpdateTimestamp = consensus.timestamp ? new Date(consensus.timestamp) : new Date();
 
-  renderChart(24).then(() => {
-    console.log('✅ renderChart completed successfully');
-    sendLog('✅ renderChart completed successfully');
-    // Cambiar color del canvas para indicar éxito
-    canvas.style.border = '2px solid green';
-  }).catch(error => {
-    console.error('❌ renderChart failed:', error);
-    sendLog('❌ renderChart failed: ' + error.message);
-    // Cambiar color del canvas para indicar error
-    canvas.style.border = '2px solid red';
-  });
-
-  // Variables para modo LIVE
-  let isLiveMode = false;
-  let liveUpdateInterval = null;
-
-  // Variables para auto-refresh
-  let autoRefreshInterval = null;
-  let timeAgoInterval = null;
-
-  // Variable para el gráfico de Chart.js
-  let trendChart = null;
-
-  // Inicializar timestamp de última actualización
-  let lastUpdateTimestamp = GLOBAL_CONSENSUS_TIMESTAMP && GLOBAL_CONSENSUS_TIMESTAMP !== '' ? new Date(GLOBAL_CONSENSUS_TIMESTAMP) : new Date();
-
-  // Actualizar indicador cada segundo
-  function startTimeAgoUpdater() {
+    // Actualizar tiempo ago inmediatamente
     const timeAgoElement = document.getElementById('time-ago');
-    if (!timeAgoElement) return;
-    
-    timeAgoInterval = setInterval(() => {
-      timeAgoElement.textContent = updateTimeAgo(lastUpdateTimestamp);
-    }, 1000);
-    
-    // Actualización inicial
-    timeAgoElement.textContent = updateTimeAgo(lastUpdateTimestamp);
-  }
+    if (timeAgoElement) timeAgoElement.textContent = updateTimeAgo(lastUpdateTimestamp);
 
-  // Función para actualizar el dashboard con nuevos datos
-  async function refreshDashboardData() {
-    try {
-      const response = await fetch('/api/consensus');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      
-      const data = await response.json();
-      
-      // Actualizar timestamp siempre que se refresca
-      lastUpdateTimestamp = data.timestamp ? new Date(data.timestamp) : new Date();
-      
-      // Actualizar consenso en chips
-      const midChip = document.querySelector('.chip-positive');
-      if (midChip && data.mid_rate) {
-        midChip.textContent = `📊 Mid ${data.mid_rate.toFixed(2)} DOP`;
+    // Actualizar fichas de consenso del Hero
+    const midChips = document.querySelectorAll('.chip-positive');
+    midChips.forEach(chip => {
+      if (chip.textContent.includes('Mid')) {
+        chip.textContent = `📊 Mid ${fmtNumber(consensus.mid_rate)} DOP`;
       }
-      
-      // Actualizar resumen
-      const summary = document.querySelector('.hero-summary');
-      if (summary) {
-        summary.textContent = `Seguimiento en tiempo real al consenso del mercado: mid ${data.mid_rate.toFixed(2)} DOP, divergencia ${data.divergence_range.toFixed(3)} y activo.`;
-      }
-      
-      // Actualizar calculadora si hay valor
-      const calcAmount = document.getElementById('calc-amount');
-      if (calcAmount && calcAmount.value) {
-        updateCalculator(parseFloat(calcAmount.value), data);
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-      // Incluso en error, actualizar timestamp para mostrar que se intentó
-      lastUpdateTimestamp = new Date();
-      return null;
+    });
+
+    const heroSummary = document.querySelector('.hero-summary');
+    if (heroSummary && consensus) {
+      const activeCount = window.GLOBAL_PROVIDER_STATUS_JSON.filter(p => p.enabled).length;
+      heroSummary.textContent = `Seguimiento en tiempo real al consenso del mercado: mid ${fmtNumber(consensus.mid_rate)} DOP, divergencia ${fmtNumber(consensus.divergence_range, 3)} y ${activeCount}/${window.GLOBAL_PROVIDER_STATUS_JSON.length} proveedores activos.`;
     }
-  }
 
-  // Auto-refresh cada 30 segundos
-  function startAutoRefresh() {
-    autoRefreshInterval = setInterval(async () => {
-      const data = await refreshDashboardData();
-      if (data) {
-        // Solo mostrar toast si la página está visible
-        if (document.visibilityState === 'visible') {
-          showToast('Dashboard actualizado automáticamente', 'info');
+    // Actualizar tarjetas dinámicas (Consenso actual)
+    const consensusCard = document.querySelector('.card:nth-child(1)');
+    if (consensusCard && consensus) {
+      const vals = consensusCard.querySelectorAll('.stat-value');
+      if (vals.length >= 3) {
+        animateValueChange(vals[0], consensus.buy_rate);
+        animateValueChange(vals[1], consensus.sell_rate);
+        animateValueChange(vals[2], consensus.weighted_mid_rate);
+      }
+      const consensusTime = consensusCard.querySelector('.timestamp');
+      if (consensusTime) {
+        consensusTime.textContent = new Date(consensus.timestamp).toLocaleString();
+      }
+      const divStrong = consensusCard.querySelector('.stat-foot strong');
+      if (divStrong) {
+        divStrong.textContent = fmtNumber(consensus.divergence_range, 3);
+      }
+    }
+
+    // 2. Obtener Recomendación IA
+    const resRec = await fetch('/api/recommendation');
+    if (resRec.ok) {
+      const rec = await resRec.json();
+      
+      // Actualizar tarjeta del Hero
+      const heroStats = document.querySelector('.hero-stats');
+      if (heroStats) {
+        const statCards = heroStats.querySelectorAll('.hero-stat-card');
+        if (statCards.length >= 3) {
+          // Acción sugerida
+          const valAction = statCards[0].querySelector('.hero-stat-value');
+          if (valAction) valAction.textContent = rec.action.toUpperCase();
+          const metaAction = statCards[0].querySelector('.hero-stat-meta');
+          if (metaAction) metaAction.textContent = `Confianza ${fmtNumber(rec.score * 100, 0)}%`;
+
+          // Ganancia esperada
+          const valProfit = statCards[1].querySelector('.hero-stat-value');
+          if (valProfit) animateValueChange(valProfit, rec.expected_profit, true, '', ' DOP');
+          const metaProfit = statCards[1].querySelector('.hero-stat-meta');
+          if (metaProfit) metaProfit.textContent = `Ventaja ${fmtNumber(rec.spread_advantage, 3)}`;
         }
       }
-    }, 30000); // 30 segundos
-  }
 
-  // Botón de refresh manual
-  const manualRefreshBtn = document.getElementById('manual-refresh-btn');
-  if (manualRefreshBtn) {
-    manualRefreshBtn.addEventListener('click', async () => {
-      manualRefreshBtn.disabled = true;
-      manualRefreshBtn.textContent = '🔄 Actualizando...';
-      
-      const data = await refreshDashboardData();
-      if (data) {
-        showToast('Dashboard actualizado exitosamente. Recargando...', 'success');
-        // Recargar la página para actualizar todas las secciones
-        setTimeout(() => location.reload(), 500);
-      } else {
-        showToast('Error al actualizar el dashboard', 'error');
-      }
-      
-      manualRefreshBtn.disabled = false;
-      manualRefreshBtn.textContent = '🔄 Refrescar ahora';
-    });
-  }
+      // Actualizar Tarjeta de Recomendación Activa
+      const recCard = document.querySelector('.card.success');
+      if (recCard) {
+        const timestampEl = recCard.querySelector('.timestamp');
+        if (timestampEl) timestampEl.textContent = new Date(rec.generated_at).toLocaleString();
 
-  // ============================================================================ 
-  // Calculadora Rápida
-  // ============================================================================ 
-  
-  const calcAmountInput = document.getElementById('calc-amount');
-  const calcBuyElement = document.getElementById('calc-buy');
-  const calcSellElement = document.getElementById('calc-sell');
-  const calcProfitElement = document.getElementById('calc-profit');
-  
-  function updateCalculator(amount, consensusData = null) {
-    if (!amount || amount <= 0) {
-      calcBuyElement.textContent = '—';
-      calcSellElement.textContent = '—';
-      calcProfitElement.textContent = '—';
-      return;
-    }
-    
-    // Usar datos del consenso actual o del parámetro
-    const buyRate = consensusData ? consensusData.buy_rate : GLOBAL_CONSENSUS_BUY_RATE;
-    const sellRate = consensusData ? consensusData.sell_rate : GLOBAL_CONSENSUS_SELL_RATE;
-    
-    if (!buyRate || !sellRate) {
-      calcBuyElement.textContent = '—';
-      calcSellElement.textContent = '—';
-      calcProfitElement.textContent = '—';
-      return;
-    }
-    
-    const buyTotal = amount * buyRate;
-    const sellTotal = amount * sellRate;
-    const profit = sellTotal - buyTotal;
-    
-    calcBuyElement.textContent = `DOP ${buyTotal.toFixed(2)}`;
-    calcSellElement.textContent = `DOP ${sellTotal.toFixed(2)}`;
-    calcProfitElement.textContent = `${profit >= 0 ? '+' : ''}DOP ${profit.toFixed(2)}`;
-    calcProfitElement.style.color = profit >= 0 ? '#10b981' : '#ef4444';
-  }
-  
-  if (calcAmountInput) {
-    calcAmountInput.addEventListener('input', (e) => {
-      const amount = parseFloat(e.target.value);
-      updateCalculator(amount);
-    });
-    
-    // Calcular con ejemplo inicial si hay consenso
-    if (GLOBAL_CONSENSUS_BUY_RATE) {
-      setTimeout(() => {
-        calcAmountInput.value = '500';
-        updateCalculator(500);
-      }, 1000);
-    }
-  }
-
-  // ============================================================================ 
-  // Gráfico de Tendencia con Chart.js
-  // ============================================================================ 
-  
-  async function loadChartData(hours = 24) {
-    console.log('loadChartData llamado con hours:', hours);
-    try {
-      const minutes = hours * 60;
-      console.log('Haciendo fetch a:', `/api/snapshots?minutes=${minutes}`);
-      const response = await fetch(`/api/snapshots?minutes=${minutes}`);
-      console.log('Respuesta del fetch:', response.status, response.statusText);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      
-      const snapshots = await response.json();
-      console.log('Datos JSON obtenidos:', snapshots.length, 'registros');
-      return snapshots;
-    } catch (error) {
-      console.error('Error loading chart data:', error);
-      return [];
-    }
-  }
-
-  function processChartData(snapshots) {
-    if (!snapshots || snapshots.length === 0) {
-      return { labels: [], buyRates: [], sellRates: [] };
-    }
-
-    // Agrupar por timestamp para promediar (evitar múltiples proveedores al mismo tiempo)
-    const grouped = {};
-    snapshots.forEach(snap => {
-      const timestamp = new Date(snap.timestamp).getTime();
-      if (!grouped[timestamp]) {
-        grouped[timestamp] = { buy: [], sell: [], timestamp: snap.timestamp };
-      }
-      grouped[timestamp].buy.push(snap.buy_rate);
-      grouped[timestamp].sell.push(snap.sell_rate);
-    });
-
-    // Promediar y ordenar
-    const processed = Object.values(grouped)
-      .map(group => ({
-        timestamp: group.timestamp,
-        buyRate: group.buy.reduce((a, b) => a + b, 0) / group.buy.length,
-        sellRate: group.sell.reduce((a, b) => a + b, 0) / group.sell.length
-      }))
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    // Reducir puntos si hay muchos (mostrar cada N puntos)
-    const maxPoints = 50;
-    const step = Math.ceil(processed.length / maxPoints);
-    const reduced = processed.filter((_, index) => index % step === 0);
-
-    return {
-      labels: reduced.map(d => {
-        const date = new Date(d.timestamp);
-        const hours = date.getHours().toString().padStart(2, '0');
-        const minutes = date.getMinutes().toString().padStart(2, '0');
-        return `${hours}:${minutes}`;
-      }),
-      buyRates: reduced.map(d => d.buyRate),
-      sellRates: reduced.map(d => d.sellRate),
-      rawData: processed
-    };
-  }
-
-  function calculateStats(data) {
-    if (!data || data.length === 0) return null;
-
-    const buyRates = data.map(d => d.buyRate);
-    const sellRates = data.map(d => d.sellRate);
-
-    const avgBuy = buyRates.reduce((a, b) => a + b, 0) / buyRates.length;
-    const avgSell = sellRates.reduce((a, b) => a + b, 0) / sellRates.length;
-
-    // Volatilidad (desviación estándar)
-    const variance = buyRates.reduce((sum, rate) => sum + Math.pow(rate - avgBuy, 2), 0) / buyRates.length;
-    const volatility = Math.sqrt(variance);
-
-    // Tendencia (comparar primeros 25% vs últimos 25%)
-    const quarter = Math.floor(data.length / 4);
-    const firstQuarter = buyRates.slice(0, quarter).reduce((a, b) => a + b, 0) / quarter;
-    const lastQuarter = buyRates.slice(-quarter).reduce((a, b) => a + b, 0) / quarter;
-    const trend = lastQuarter - firstQuarter;
-
-    return { avgBuy, avgSell, volatility, trend };
-  }
-
-  async function renderChart(hours = 24) {
-    console.log('🚀 Iniciando renderChart con hours:', hours);
-    sendLog('🚀 Iniciando renderChart con hours: ' + hours);
-
-    // Verificar que el canvas existe
-    const canvasElement = document.getElementById('trend-chart');
-    if (!canvasElement) {
-      console.error('❌ ERROR: Canvas #trend-chart no encontrado');
-      return;
-    }
-    console.log('✅ Canvas encontrado');
-
-    // Verificar que Chart.js está cargado
-    if (typeof Chart === 'undefined') {
-      console.error('❌ ERROR: Chart.js no está cargado');
-      return;
-    }
-    console.log('✅ Chart.js disponible');
-
-    try {
-      // Destruir chart anterior si existe
-      if (trendChart) {
-        console.log('Destruyendo chart anterior');
-        trendChart.destroy();
-      }
-
-      const ctx = canvasElement.getContext('2d');
-      console.log('Canvas context:', ctx);
-
-      // Crear un gráfico muy simple para probar
-      console.log('🔄 Creando gráfico de prueba...');
-      trendChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: ['10:00', '11:00', '12:00', '13:00', '14:00'],
-          datasets: [{
-            label: 'Prueba',
-            data: [63.0, 63.2, 63.1, 63.3, 63.4],
-            borderColor: '#4cc3ff',
-            backgroundColor: 'rgba(76, 195, 255, 0.15)',
-            borderWidth: 2
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false
+        const vals = recCard.querySelectorAll('.stat-value');
+        if (vals.length >= 3) {
+          vals[0].textContent = rec.action.toUpperCase();
+          vals[1].textContent = `${fmtNumber(rec.score * 100, 0)}%`;
+          animateValueChange(vals[2], rec.expected_profit, true, '', ' DOP');
         }
+
+        const bullets = recCard.querySelectorAll('.mini-list li strong');
+        if (bullets.length >= 3) {
+          bullets[0].textContent = fmtNumber(rec.suggested_buy_rate);
+          bullets[1].textContent = fmtNumber(rec.suggested_sell_rate);
+          bullets[2].textContent = fmtNumber(rec.spread_advantage, 3);
+        }
+
+        const reasonText = recCard.querySelector('.reason');
+        if (reasonText) reasonText.textContent = rec.reason;
+      }
+    }
+
+    // 3. Obtener Forecast de Cierre
+    const resForecast = await fetch('/api/forecast');
+    if (resForecast.ok) {
+      const fc = await resForecast.json();
+      const forecastCard = document.querySelector('.card.forecast');
+      if (forecastCard) {
+        const timestampEl = forecastCard.querySelector('.timestamp');
+        if (timestampEl) timestampEl.textContent = new Date(fc.generated_at).toLocaleString();
+
+        const vals = forecastCard.querySelectorAll('.stat-value');
+        if (vals.length >= 3) {
+          animateValueChange(vals[0], fc.expected_profit_end_day);
+          animateValueChange(vals[1], fc.best_case);
+          animateValueChange(vals[2], fc.worst_case);
+        }
+
+        const foot = forecastCard.querySelector('.stat-foot');
+        if (foot) {
+          foot.textContent = `Intervalo ±${fmtNumber(fc.confidence_interval)} DOP · ${fc.details}`;
+        }
+      }
+    }
+
+    // 4. Refrescar listas e historias
+    await refreshTables();
+
+    // 5. Refrescar calculadora rápida con datos nuevos
+    const calcAmount = document.getElementById('calc-amount');
+    if (calcAmount && calcAmount.value) {
+      updateCalculator(parseFloat(calcAmount.value), consensus);
+    }
+
+    // 6. Actualizar gráfico si es necesario
+    if (updateChart && trendChart) {
+      await renderChart(currentChartPeriod);
+    }
+
+  } catch (error) {
+    console.error("Error actualizando dashboard:", error);
+  }
+}
+
+// Refrescar tablas dinámicas (trades, snapshots, providers)
+async function refreshTables() {
+  try {
+    // 1. Tabla de Historial de Operaciones
+    const resTrades = await fetch('/api/history?limit=8', { method: 'POST' });
+    if (resTrades.ok) {
+      const trades = await resTrades.json();
+      const tbody = document.getElementById('trade-history-tbody');
+      if (tbody) {
+        tbody.innerHTML = '';
+        if (trades.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Sin operaciones registradas.</td></tr>`;
+        } else {
+          trades.forEach(trade => {
+            const date = new Date(trade.timestamp);
+            const time = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            const profitClass = trade.profit_dop >= 0 ? 'positive' : 'negative';
+            const tr = document.createElement('tr');
+            tr.setAttribute('data-trade-id', trade.id || '');
+            tr.innerHTML = `
+              <td>${time}</td>
+              <td>${trade.action.toUpperCase()}</td>
+              <td>${fmtNumber(trade.usd_amount)}</td>
+              <td>${fmtNumber(trade.rate)}</td>
+              <td class="${profitClass}">${fmtNumber(trade.profit_dop)}</td>
+              <td>
+                <button class="btn-edit-trade" data-trade-id="${trade.id}">✏️</button>
+                <button class="btn-delete-trade" data-trade-id="${trade.id}">🗑️</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+      }
+    }
+
+    // 2. Tabla de Proveedores y Comparación
+    const resProviders = await fetch('/api/providers');
+    if (resProviders.ok) {
+      const providers = await resProviders.json();
+      window.GLOBAL_PROVIDER_STATUS_JSON = providers; // Actualizar cache de comparación
+      const tbody = document.getElementById('provider-table-body');
+      if (tbody) {
+        tbody.innerHTML = '';
+        providers.forEach(p => {
+          const enabledClass = p.enabled ? 'tag-on' : 'tag-off';
+          const enabledText = p.enabled ? 'Sí' : 'No';
+          const originHtml = p.aggregated ? `<span class="tag tag-aggregated">${p.origin || 'Agregado'}</span>` : (p.origin || 'Directo');
+          const lastUpdate = p.last_timestamp ? new Date(p.last_timestamp).toLocaleString() : '—';
+          
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${p.name}</td>
+            <td><span class="tag ${enabledClass}">${enabledText}</span></td>
+            <td>${originHtml}</td>
+            <td>${fmtNumber(p.buy_rate)}</td>
+            <td>${fmtNumber(p.sell_rate)}</td>
+            <td>${lastUpdate}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+      
+      // Actualizar conteo de cobertura
+      const total = providers.length;
+      const enabled = providers.filter(p => p.enabled).length;
+      const pct = total ? Math.round((enabled / total) * 100) : 0;
+      
+      const coverageChips = document.querySelectorAll('#coverage-chip, #coverage-chip-secondary');
+      coverageChips.forEach(chip => {
+        chip.textContent = `🔌 ${enabled}/${total} activos (${pct}%)`;
+        chip.className = `chip ${pct >= 80 ? 'chip-positive' : (pct >= 50 ? 'chip-neutral' : 'chip-warn')}`;
       });
 
-      console.log('✅ Gráfico de prueba creado exitosamente');
-
-      // Ahora intentar cargar datos reales
-      console.log('🔄 Cargando datos reales...');
-      const snapshots = await loadChartData(hours);
-      console.log('✅ Datos obtenidos:', snapshots.length, 'registros');
-
-      if (snapshots.length > 0) {
-        const chartData = processChartData(snapshots);
-        const stats = calculateStats(chartData.rawData);
-
-        console.log('🔄 Actualizando gráfico con datos reales...');
-        trendChart.data.labels = chartData.labels;
-        trendChart.data.datasets = [
-          {
-            label: 'Compra',
-            data: chartData.buyRates,
-            borderColor: '#4cc3ff',
-            backgroundColor: 'rgba(76, 195, 255, 0.15)',
-            borderWidth: 2,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            pointHoverBackgroundColor: '#4cc3ff',
-            pointHoverBorderColor: '#fff',
-            pointHoverBorderWidth: 2
-          },
-          {
-            label: 'Venta',
-            data: chartData.sellRates,
-            borderColor: '#5de4d6',
-            backgroundColor: 'rgba(93, 228, 214, 0.15)',
-            borderWidth: 2,
-            tension: 0.4,
-            fill: true,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            pointHoverBackgroundColor: '#5de4d6',
-            pointHoverBorderColor: '#fff',
-            pointHoverBorderWidth: 2
-          }
-        ];
-
-        // Actualizar opciones con configuración completa
-        trendChart.options = {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: {
-            mode: 'index',
-            intersect: false,
-          },
-          plugins: {
-            legend: {
-              display: true,
-              position: 'top',
-              labels: {
-                color: 'rgba(241, 247, 255, 0.9)',
-                font: {
-                  size: 12,
-                  weight: '600'
-                },
-                padding: 15,
-                usePointStyle: true,
-                pointStyle: 'circle'
-              }
-            },
-            tooltip: {
-              enabled: true,
-              backgroundColor: 'rgba(13, 20, 31, 0.95)',
-              titleColor: '#f1f7ff',
-              bodyColor: '#f1f7ff',
-              borderColor: 'rgba(151, 217, 255, 0.3)',
-              borderWidth: 1,
-              padding: 12,
-              displayColors: true,
-              callbacks: {
-                label: function(context) {
-                  return ` ${context.dataset.label}: ${context.parsed.y.toFixed(2)} DOP`;
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              grid: {
-                color: 'rgba(151, 217, 255, 0.08)',
-                drawBorder: false
-              },
-              ticks: {
-                color: 'rgba(241, 247, 255, 0.6)',
-                font: {
-                  size: 10
-                },
-                maxRotation: 45,
-                minRotation: 0
-              }
-            },
-            y: {
-              beginAtZero: false,
-              grid: {
-                color: 'rgba(151, 217, 255, 0.08)',
-                drawBorder: false
-              },
-              ticks: {
-                color: 'rgba(241, 247, 255, 0.6)',
-                font: {
-                  size: 11
-                },
-                callback: function(value) {
-                  return value.toFixed(2) + ' DOP';
-                }
-              }
-            }
-          }
-        };
-
-        // Actualizar stats si existen
-        if (stats) {
-          const avgBuyEl = document.getElementById('chart-avg-buy');
-          const avgSellEl = document.getElementById('chart-avg-sell');
-          const volatilityEl = document.getElementById('chart-volatility');
-          const trendEl = document.getElementById('chart-trend');
-
-          if (avgBuyEl) avgBuyEl.textContent = stats.avgBuy.toFixed(2) + ' DOP';
-          if (avgSellEl) avgSellEl.textContent = stats.avgSell.toFixed(2) + ' DOP';
-
-          if (volatilityEl) {
-            const volatilityLevel = stats.volatility < 0.2 ? 'Baja' : stats.volatility < 0.5 ? 'Media' : 'Alta';
-            volatilityEl.textContent = volatilityLevel + ` (${stats.volatility.toFixed(3)})`;
-          }
-
-          if (trendEl) {
-            const trendText = stats.trend > 0.05 ? '📈 Alcista' : stats.trend < -0.05 ? '📉 Bajista' : '➡️ Estable';
-            const trendColor = stats.trend > 0.05 ? '#10b981' : stats.trend < -0.05 ? '#ef4444' : '#ffc961';
-            trendEl.textContent = trendText;
-            trendEl.style.color = trendColor;
-          }
-        }
-
-        trendChart.update();
-        console.log('✅ Gráfico actualizado con datos reales');
-      }
-
-    } catch (error) {
-      console.error('❌ Error en renderChart:', error);
+      // Sincronizar selectores de comparación
+      updateComparisonSelects(providers);
     }
+
+    // 3. Tabla de Snapshots Recientes
+    const resSnaps = await fetch(`/api/snapshots?minutes=180`);
+    if (resSnaps.ok) {
+      const snaps = await resSnaps.json();
+      const tbody = document.getElementById('recent-snapshots-tbody');
+      if (tbody) {
+        tbody.innerHTML = '';
+        const limitSnaps = snaps.slice(0, 20);
+        if (limitSnaps.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Sin lecturas almacenadas.</td></tr>`;
+        } else {
+          limitSnaps.forEach(s => {
+            const date = new Date(s.timestamp);
+            const formattedDate = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${formattedDate}</td>
+              <td>${s.source}</td>
+              <td>${fmtNumber(s.buy_rate)}</td>
+              <td>${fmtNumber(s.sell_rate)}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error al refrescar tablas:", err);
+  }
+}
+
+// Sincronizar opciones de proveedores en selectores de comparación
+function updateComparisonSelects(providers) {
+  const p1 = document.getElementById('provider-1');
+  const p2 = document.getElementById('provider-2');
+  if (!p1 || !p2) return;
+
+  const val1 = p1.value;
+  const val2 = p2.value;
+
+  p1.innerHTML = '<option value="">Seleccionar Proveedor 1</option>';
+  p2.innerHTML = '<option value="">Seleccionar Proveedor 2</option>';
+
+  providers.forEach(p => {
+    const opt1 = document.createElement('option');
+    opt1.value = p.name;
+    opt1.textContent = p.name;
+    opt1.selected = p.name === val1;
+    p1.appendChild(opt1);
+
+    const opt2 = document.createElement('option');
+    opt2.value = p.name;
+    opt2.textContent = p.name;
+    opt2.selected = p.name === val2;
+    p2.appendChild(opt2);
+  });
+}
+
+// ============================================================================ 
+// Modal de Operaciones (Creación y Edición)
+// ============================================================================ 
+const modal = document.getElementById('trade-modal');
+const modalTitle = document.getElementById('modal-title');
+const modalForm = document.getElementById('modal-trade-form');
+const modalTradeId = document.getElementById('modal-trade-id');
+const modalAmountInput = document.getElementById('modal-trade-amount');
+const modalRateInput = document.getElementById('modal-trade-rate');
+const modalFeesInput = document.getElementById('modal-trade-fees');
+const modalResult = document.getElementById('modal-trade-result');
+const modalSubmitBtn = document.getElementById('modal-submit-btn');
+
+function openTradeModal(tradeData = null) {
+  if (!modal) return;
+
+  // Limpiar estados
+  modalResult.textContent = '';
+  modalResult.className = 'hint';
+  modalForm.reset();
+
+  if (tradeData) {
+    // Editar
+    modalTitle.textContent = `Editar Operación #${tradeData.id}`;
+    modalTradeId.value = tradeData.id;
+    
+    // Marcar acción (buy/sell)
+    if (tradeData.action === 'buy') {
+      document.getElementById('modal-action-buy').checked = true;
+    } else {
+      document.getElementById('modal-action-sell').checked = true;
+    }
+
+    modalAmountInput.value = tradeData.usd_amount;
+    modalRateInput.value = tradeData.rate || '';
+    modalFeesInput.value = tradeData.fees !== undefined ? tradeData.fees : '';
+    modalSubmitBtn.textContent = 'Guardar Cambios';
+  } else {
+    // Crear
+    modalTitle.textContent = 'Registrar Operación';
+    modalTradeId.value = '';
+    
+    // Pre-poblar acción con recomendación actual si está disponible
+    const recAction = document.querySelector('.card.success .stat-value')?.textContent.trim().toLowerCase();
+    if (recAction === 'buy') {
+      document.getElementById('modal-action-buy').checked = true;
+    } else {
+      document.getElementById('modal-action-sell').checked = true;
+    }
+
+    // Pre-poblar tasa sugerida
+    const consensusRate = document.getElementById('calc-amount') ? window.GLOBAL_CONSENSUS_BUY_RATE : null;
+    modalRateInput.value = '';
+    modalFeesInput.value = '';
+    modalSubmitBtn.textContent = 'Guardar Operación';
   }
 
-  // Event listeners para botones de período
+  modal.style.display = 'flex';
+}
+
+function closeTradeModal() {
+  if (modal) modal.style.display = 'none';
+}
+
+// Configurar listeners del modal
+document.addEventListener('DOMContentLoaded', () => {
+  const openModalBtn = document.getElementById('open-trade-modal-btn');
+  const cancelBtn = document.getElementById('modal-cancel-btn');
+  const closeBtn = document.getElementById('modal-close-btn');
+
+  if (openModalBtn) openModalBtn.addEventListener('click', () => openTradeModal());
+  if (cancelBtn) cancelBtn.addEventListener('click', closeTradeModal);
+  if (closeBtn) closeBtn.addEventListener('click', closeTradeModal);
+
+  // Cerrar modal al hacer clic fuera del card
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeTradeModal();
+    });
+  }
+
+  // Enviar formulario del modal
+  if (modalForm) {
+    modalForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const tradeId = modalTradeId.value;
+      const isEdit = tradeId !== '';
+      
+      const action = document.querySelector('input[name="modal-trade-action"]:checked').value;
+      const amount = parseFloat(modalAmountInput.value);
+      const rateVal = modalRateInput.value;
+      const feesVal = modalFeesInput.value;
+
+      if (isNaN(amount) || amount <= 0) {
+        modalResult.textContent = '❌ Error: El monto USD debe ser mayor a 0';
+        modalResult.className = 'hint status-error';
+        return;
+      }
+
+      const payload = {
+        action: action,
+        usd_amount: amount
+      };
+
+      if (rateVal && parseFloat(rateVal) > 0) payload.rate = parseFloat(rateVal);
+      if (feesVal && parseFloat(feesVal) >= 0) payload.fees = parseFloat(feesVal);
+
+      modalSubmitBtn.disabled = true;
+      modalSubmitBtn.textContent = 'Procesando...';
+
+      try {
+        const endpoint = isEdit ? `/api/trade/${tradeId}` : '/api/trade';
+        const method = isEdit ? 'PUT' : 'POST';
+
+        const response = await fetch(endpoint, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || `Error HTTP ${response.status}`);
+        }
+
+        showToast(
+          isEdit ? `Operación #${tradeId} actualizada exitosamente.` : 'Nueva operación registrada con éxito.',
+          'success'
+        );
+        closeTradeModal();
+        
+        // Notificar cambio localmente de inmediato si el SSE tarda
+        refreshDashboardData();
+
+      } catch (err) {
+        console.error(err);
+        modalResult.textContent = `❌ Error: ${err.message}`;
+        modalResult.className = 'hint status-error';
+      } finally {
+        modalSubmitBtn.disabled = false;
+        modalSubmitBtn.textContent = isEdit ? 'Guardar Cambios' : 'Guardar Operación';
+      }
+    });
+  }
+});
+
+// ============================================================================ 
+// Gráfico de Tendencia con Banda de Spread (Chart.js 4)
+// ============================================================================ 
+async function loadChartData(hours = 24) {
+  try {
+    const minutes = hours * 60;
+    const response = await fetch(`/api/snapshots?minutes=${minutes}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    console.error('Error cargando datos de gráfico:', error);
+    return [];
+  }
+}
+
+function processChartData(snapshots) {
+  if (!snapshots || snapshots.length === 0) {
+    return { labels: [], buyRates: [], sellRates: [], rawData: [] };
+  }
+
+  // Agrupar por timestamp para promediar lecturas concurrentes
+  const grouped = {};
+  snapshots.forEach(snap => {
+    const timestamp = new Date(snap.timestamp).getTime();
+    if (!grouped[timestamp]) {
+      grouped[timestamp] = { buy: [], sell: [], timestamp: snap.timestamp };
+    }
+    grouped[timestamp].buy.push(snap.buy_rate);
+    grouped[timestamp].sell.push(snap.sell_rate);
+  });
+
+  // Promediar y ordenar cronológicamente
+  const processed = Object.values(grouped)
+    .map(group => ({
+      timestamp: group.timestamp,
+      buyRate: group.buy.reduce((a, b) => a + b, 0) / group.buy.length,
+      sellRate: group.sell.reduce((a, b) => a + b, 0) / group.sell.length
+    }))
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+  // Limitar cantidad de puntos visualizados
+  const maxPoints = 60;
+  const step = Math.ceil(processed.length / maxPoints);
+  const reduced = processed.filter((_, index) => index % step === 0);
+
+  return {
+    labels: reduced.map(d => {
+      const date = new Date(d.timestamp);
+      return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    }),
+    buyRates: reduced.map(d => d.buyRate),
+    sellRates: reduced.map(d => d.sellRate),
+    rawData: processed
+  };
+}
+
+function calculateStats(data) {
+  if (!data || data.length === 0) return null;
+
+  const buyRates = data.map(d => d.buyRate);
+  const avgBuy = buyRates.reduce((a, b) => a + b, 0) / buyRates.length;
+  
+  const sellRates = data.map(d => d.sellRate);
+  const avgSell = sellRates.reduce((a, b) => a + b, 0) / sellRates.length;
+
+  const variance = buyRates.reduce((sum, rate) => sum + Math.pow(rate - avgBuy, 2), 0) / buyRates.length;
+  const volatility = Math.sqrt(variance);
+
+  const quarter = Math.floor(data.length / 4) || 1;
+  const firstQuarter = buyRates.slice(0, quarter).reduce((a, b) => a + b, 0) / quarter;
+  const lastQuarter = buyRates.slice(-quarter).reduce((a, b) => a + b, 0) / quarter;
+  const trend = lastQuarter - firstQuarter;
+
+  return { avgBuy, avgSell, volatility, trend };
+}
+
+async function renderChart(hours = 24) {
+  const canvasElement = document.getElementById('trend-chart');
+  if (!canvasElement || typeof Chart === 'undefined') return;
+
+  try {
+    const snapshots = await loadChartData(hours);
+    const chartData = processChartData(snapshots);
+    const stats = calculateStats(chartData.rawData);
+
+    if (trendChart) {
+      trendChart.destroy();
+    }
+
+    const ctx = canvasElement.getContext('2d');
+    
+    // Crear gradientes de fondo premium para las líneas y el sombreado de spread
+    const buyGradient = ctx.createLinearGradient(0, 0, 0, 300);
+    buyGradient.addColorStop(0, 'rgba(14, 165, 233, 0.22)');
+    buyGradient.addColorStop(1, 'rgba(14, 165, 233, 0)');
+
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.05)';
+    const textColor = isDark ? '#94a3b8' : '#64748b';
+
+    trendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: chartData.labels,
+        datasets: [
+          {
+            label: 'Compra (Vender USD)',
+            data: chartData.buyRates,
+            borderColor: '#0ea5e9', // accent-cyan
+            backgroundColor: 'transparent',
+            borderWidth: 2.5,
+            tension: 0.35,
+            pointRadius: 2.5,
+            pointHoverRadius: 6,
+            pointHoverBackgroundColor: '#0ea5e9',
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2
+          },
+          {
+            label: 'Venta (Comprar USD)',
+            data: chartData.sellRates,
+            borderColor: '#10b981', // accent-mint
+            // fill: 0 rellena el área entre este dataset (indice 1) y el anterior (indice 0)
+            fill: 0,
+            backgroundColor: isDark ? 'rgba(14, 165, 233, 0.06)' : 'rgba(2, 132, 199, 0.05)',
+            borderWidth: 2.5,
+            tension: 0.35,
+            pointRadius: 2.5,
+            pointHoverRadius: 6,
+            pointHoverBackgroundColor: '#10b981',
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: textColor,
+              font: {
+                family: 'Outfit',
+                size: 12,
+                weight: '600'
+              },
+              usePointStyle: true,
+              pointStyle: 'circle',
+              padding: 15
+            }
+          },
+          tooltip: {
+            enabled: true,
+            backgroundColor: isDark ? 'rgba(13, 20, 37, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+            titleColor: isDark ? '#f8fafc' : '#0f172a',
+            bodyColor: isDark ? '#f8fafc' : '#0f172a',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+            borderWidth: 1,
+            padding: 12,
+            titleFont: { family: 'Outfit', weight: 'bold' },
+            bodyFont: { family: 'Outfit' },
+            callbacks: {
+              label: function (context) {
+                return ` ${context.dataset.label}: ${fmtNumber(context.parsed.y)} DOP`;
+              },
+              afterBody: function(items) {
+                if (items.length >= 2) {
+                  const buy = items[0].parsed.y;
+                  const sell = items[1].parsed.y;
+                  const spread = sell - buy;
+                  return ` Spread: ${fmtNumber(spread, 3)} DOP`;
+                }
+                return '';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: gridColor },
+            ticks: {
+              color: textColor,
+              font: { family: 'Outfit', size: 10 }
+            }
+          },
+          y: {
+            grid: { color: gridColor },
+            ticks: {
+              color: textColor,
+              font: { family: 'Outfit', size: 11 },
+              callback: function (value) { return value.toFixed(2) + ' DOP'; }
+            }
+          }
+        }
+      }
+    });
+
+    // Actualizar bloque de estadísticas bajo el gráfico
+    if (stats) {
+      const avgBuyEl = document.getElementById('chart-avg-buy');
+      const avgSellEl = document.getElementById('chart-avg-sell');
+      const volatilityEl = document.getElementById('chart-volatility');
+      const trendEl = document.getElementById('chart-trend');
+
+      if (avgBuyEl) avgBuyEl.textContent = fmtNumber(stats.avgBuy) + ' DOP';
+      if (avgSellEl) avgSellEl.textContent = fmtNumber(stats.avgSell) + ' DOP';
+
+      if (volatilityEl) {
+        const volLevel = stats.volatility < 0.1 ? 'Muy Baja' : stats.volatility < 0.3 ? 'Baja' : 'Alta';
+        volatilityEl.textContent = `${volLevel} (${fmtNumber(stats.volatility, 3)})`;
+      }
+
+      if (trendEl) {
+        const isUp = stats.trend > 0.01;
+        const isDown = stats.trend < -0.01;
+        trendEl.textContent = isUp ? '📈 Alcista' : (isDown ? '📉 Bajista' : '➡️ Estable');
+        trendEl.style.color = isUp ? 'var(--positive-color)' : (isDown ? 'var(--accent-rose)' : 'var(--accent-amber)');
+      }
+    }
+
+  } catch (error) {
+    console.error('Error renderizando gráfico:', error);
+  }
+}
+
+// Configurar listeners del gráfico periodos
+document.addEventListener('DOMContentLoaded', () => {
   const periodButtons = document.querySelectorAll('.chart-period-btn');
   periodButtons.forEach(btn => {
     btn.addEventListener('click', async () => {
-      // Si ya está en modo LIVE y se hace clic en otro botón, detener LIVE
+      // Detener LIVE si salimos de ese modo
       if (isLiveMode && !btn.classList.contains('live-btn')) {
         clearInterval(liveUpdateInterval);
         liveUpdateInterval = null;
@@ -591,803 +808,406 @@ document.addEventListener('DOMContentLoaded', function() {
         showToast('Modo LIVE desactivado', 'info');
       }
 
-      // Remover active de todos
-      periodButtons.forEach(b => {
-        b.classList.remove('active');
-        b.style.borderColor = 'rgba(151, 217, 255, 0.2)';
-        b.style.background = 'rgba(76, 195, 255, 0.1)';
-        b.style.fontWeight = 'normal';
-      });
-      
-      // Agregar active al clickeado
+      periodButtons.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      btn.style.borderColor = 'rgba(151, 217, 255, 0.4)';
-      btn.style.background = 'rgba(76, 195, 255, 0.25)';
-      btn.style.fontWeight = '600';
-      
+
       const hours = parseFloat(btn.dataset.hours);
       currentChartPeriod = hours;
 
-      // Manejo especial para botón LIVE
       if (btn.classList.contains('live-btn')) {
-        // Activar modo LIVE
         isLiveMode = true;
         await renderChart(hours);
-        
-        // Configurar actualizaciones automáticas cada 30 segundos
         liveUpdateInterval = setInterval(async () => {
-          try {
-            await renderChart(hours);
-          } catch (error) {
-            console.error('Error en actualización LIVE:', error);
-            // Si hay error, detener las actualizaciones
-            clearInterval(liveUpdateInterval);
-            liveUpdateInterval = null;
-            isLiveMode = false;
-            showToast('Error en modo LIVE, actualizaciones detenidas', 'error');
-          }
-        }, 30000); // 30 segundos
-        
-        showToast('Modo LIVE activado: actualizaciones cada 30s', 'success');
+          await renderChart(hours);
+        }, 15000); // 15 segundos para LIVE real-time
+        showToast('Modo LIVE activo (15s update)', 'success');
       } else {
-        // Para otros botones, renderizar una vez
         await renderChart(hours);
-        showToast(`Gráfico actualizado: últimas ${hours}h`, 'info');
       }
     });
   });
+});
 
-  // ============================================================================ 
-  // Filtros de Tabla de Proveedores
-  // ============================================================================ 
-  
-  const providerSearchInput = document.getElementById('provider-search');
-  const providerStatusFilter = document.getElementById('provider-status-filter');
-  const providerOriginFilter = document.getElementById('provider-origin-filter');
-  const clearFiltersBtn = document.getElementById('clear-filters-btn');
-  const visibleCountSpan = document.getElementById('visible-count');
-  
-  // Capturar todas las filas al cargar
-  function captureProviderRows() {
-    if (!providerTableBody) return;
-    
-    allProviderRows = Array.from(providerTableBody.querySelectorAll('tr')).map(row => {
-      const cells = row.querySelectorAll('td');
-      if (cells.length < 6) return null;
-      
-      return {
-        element: row,
-        name: cells[0].textContent.trim().toLowerCase(),
-        enabled: cells[1].textContent.trim().toLowerCase() === 'sí',
-        origin: cells[2].textContent.trim().toLowerCase(),
-        buyRate: cells[3].textContent.trim(),
-        sellRate: cells[4].textContent.trim(),
-        updated: cells[5].textContent.trim()
-      };
-    }).filter(row => row !== null);
-  }
-  
-  // Aplicar filtros
-  function applyProviderFilters() {
-    if (allProviderRows.length === 0) {
-      captureProviderRows();
-    }
-    
-    const searchTerm = providerSearchInput ? providerSearchInput.value.toLowerCase() : '';
-    const statusFilter = providerStatusFilter ? providerStatusFilter.value : 'all';
-    const originFilter = providerOriginFilter ? providerOriginFilter.value : 'all';
-    
-    let visibleCount = 0;
-    
-    allProviderRows.forEach(row => {
-      let visible = true;
-      
-      // Filtro de búsqueda
-      if (searchTerm && !row.name.includes(searchTerm)) {
-        visible = false;
-      }
-      
-      // Filtro de estado
-      if (statusFilter === 'active' && !row.enabled) {
-        visible = false;
-      } else if (statusFilter === 'inactive' && row.enabled) {
-        visible = false;
-      }
-      
-      // Filtro de origen
-      if (originFilter !== 'all' && !row.origin.includes(originFilter.toLowerCase())) {
-        visible = false;
-      }
-      
-      // Mostrar/ocultar fila
-      row.element.style.display = visible ? '' : 'none';
-      
-      if (visible) visibleCount++;
-    });
-    
-    // Actualizar contador
-    if (visibleCountSpan) {
-      visibleCountSpan.textContent = visibleCount;
-    }
-    
-    // Mostrar mensaje si no hay resultados
-    if (visibleCount === 0 && providerTableBody) {
-      const existingMsg = providerTableBody.querySelector('.no-results-message');
-      if (!existingMsg) {
-        const noResultsRow = document.createElement('tr');
-        noResultsRow.className = 'no-results-message';
-        noResultsRow.innerHTML = `
-          <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
-            <div style="font-size: 1rem; font-weight: 600; margin-bottom: 0.25rem;">No se encontraron proveedores</div>
-            <div style="font-size: 0.85rem;">Intenta ajustar los filtros de búsqueda</div>
-          </td>
-        `;
-        providerTableBody.appendChild(noResultsRow);
-      }
-    } else {
-      const existingMsg = providerTableBody.querySelector('.no-results-message');
-      if (existingMsg) existingMsg.remove();
-    }
-    
-    return visibleCount;
-  }
-  
-  // Event listeners para filtros
-  if (providerSearchInput) {
-    providerSearchInput.addEventListener('input', () => {
-      applyProviderFilters();
-    });
-  }
-  
-  if (providerStatusFilter) {
-    providerStatusFilter.addEventListener('change', () => {
-      const count = applyProviderFilters();
-      showToast(`Filtro aplicado: ${count} proveedores visibles`, 'info');
-    });
-  }
-  
-  if (providerOriginFilter) {
-    providerOriginFilter.addEventListener('change', () => {
-      const count = applyProviderFilters();
-      showToast(`Filtro aplicado: ${count} proveedores visibles`, 'info');
-    });
-  }
-  
-  if (clearFiltersBtn) {
-    clearFiltersBtn.addEventListener('click', () => {
-      if (providerSearchInput) providerSearchInput.value = '';
-      if (providerStatusFilter) providerStatusFilter.value = 'all';
-      if (providerOriginFilter) providerOriginFilter.value = 'all';
-      
-      const count = applyProviderFilters();
-      showToast(`Filtros limpiados: ${count} proveedores visibles`, 'success');
-    });
-  }
+// ============================================================================ 
+// Calculadora Rápida
+// ============================================================================ 
+function updateCalculator(amount, consensusData = null) {
+  const buyEl = document.getElementById('calc-buy');
+  const sellEl = document.getElementById('calc-sell');
+  const profitEl = document.getElementById('calc-profit');
+  if (!buyEl || !sellEl || !profitEl) return;
 
-  // ============================================================================ 
-  // Función para actualizar tabla de proveedores (usada por comandos)
-  // ============================================================================ 
-  function updateProvidersTable(providers) {
-    if (!Array.isArray(providers) || !providerTableBody) return;
-
-    // Limpiar tabla actual
-    providerTableBody.innerHTML = '';
-
-    // Agregar filas actualizadas
-    providers.forEach(provider => {
-      const row = document.createElement('tr');
-      const enabledText = provider.enabled ? 'Sí' : 'No';
-      const enabledClass = provider.enabled ? 'status-enabled' : 'status-disabled';
-      const buyRate = provider.buy_rate ? provider.buy_rate.toFixed(2) : '—';
-      const sellRate = provider.sell_rate ? provider.sell_rate.toFixed(2) : '—';
-      const lastUpdate = provider.last_timestamp ? new Date(provider.last_timestamp).toLocaleString() : 'Nunca';
-
-      row.innerHTML = `
-        <td>${escapeHtml(provider.name)}</td>
-        <td><span class="status-badge ${enabledClass}">${enabledText}</span></td>
-        <td>${escapeHtml(provider.origin || '—')}</td>
-        <td>${buyRate}</td>
-        <td>${sellRate}</td>
-        <td>${lastUpdate}</td>
-      `;
-
-      providerTableBody.appendChild(row);
-    });
-
-    // Recapturar filas para filtros después de actualizar
-    allProviderRows = [];
-    captureProviderRows();
-    applyProviderFilters();
-  }
-
-  // ============================================================================ 
-  // Lógica de Comandos y UI
-  // ============================================================================ 
-
-  const formatters = {
-    fetch: (data, extras) => {
-      const consensus = extras?.consensus;
-      const providersList = extras?.providers;
-      if (consensus) {
-        const providers = providersList?.length || consensus.providers_considered?.length || 0;
-        const divergence = fmtNumber(consensus.divergence_range, 3);
-        return [
-          "Captura solicitada y en curso.",
-          `Último consenso: ${fmtNumber(consensus.buy_rate)} / ${fmtNumber(consensus.sell_rate)}`,
-          `Proveedores activos: ${providers} · Divergencia: ${divergence}`,
-        ].join("\n");
-      }
-      return data?.detail || "Captura solicitada.";
-    },
-    analyze: (data) => {
-      if (!data) return "Recomendación generada.";
-      const suggestedBuy = data.suggested_buy_rate !== null ? fmtNumber(data.suggested_buy_rate) : "—";
-      const suggestedSell = data.suggested_sell_rate !== null ? fmtNumber(data.suggested_sell_rate) : "—";
-      const advantage = data.spread_advantage !== null ? fmtNumber(data.spread_advantage, 3) : "—";
-      return [
-        `${data.action.toUpperCase()} · Ganancia esperada ${fmtNumber(data.expected_profit)} DOP · Confianza ${fmtNumber(data.score * 100, 1)}%`,
-        `Compra sugerida: ${suggestedBuy} | Venta sugerida: ${suggestedSell}`,
-        `Ventaja vs mercado: ${advantage}`,
-        `Motivo: ${shortText(data.reason, 140)}`,
-      ].join("\n");
-    },
-    forecast: (data) => {
-      if (!data) return "Pronóstico actualizado.";
-      return [
-        `Esperado: ${fmtNumber(data.expected_profit_end_day)} DOP`,
-        `Mejor caso: ${fmtNumber(data.best_case)} | Peor caso: ${fmtNumber(data.worst_case)}`,
-        `Confianza ±${fmtNumber(data.confidence_interval)} · ${shortText(data.details, 120)}`,
-      ].join("\n");
-    },
-    compare: (data) => {
-      if (!data) return "Comparación generada.";
-      const flagged = Array.isArray(data.validations)
-        ? data.validations.filter((item) => item.flagged).length
-        : 0;
-      return [
-        `Consenso ${fmtNumber(data.buy_rate)} / ${fmtNumber(data.sell_rate)} · ${data.providers_considered?.length || 0} proveedores`,
-        `Divergencia: ${fmtNumber(data.divergence_range, 3)} · Outliers: ${flagged}`,
-      ].join("\n");
-    },
-    providers: (data) => {
-      if (!Array.isArray(data)) return "Consulta completada.";
-      const enabled = data.filter((provider) => provider.enabled).length;
-      const total = data.length;
-      const recent = data
-        .filter((provider) => provider.last_timestamp)
-        .slice(0, 3)
-        .map((provider) => provider.name)
-        .join(", ") || "sin actualizaciones";
-      return [
-        `Proveedores habilitados: ${enabled}/${total}`,
-        `Actualizados recientemente: ${recent}`,
-      ].join("\n");
-    },
-    history: (data) => {
-      if (!Array.isArray(data) || data.length === 0) {
-        return "Sin operaciones registradas.";
-      }
-      const [latest] = data;
-      const when = latest.timestamp ? new Date(latest.timestamp).toLocaleString() : "Fecha N/D";
-      return [
-        `${data.length} operaciones registradas.`,
-        `Última: ${latest.action?.toUpperCase() || "N/A"} · USD ${fmtNumber(latest.usd_amount)} a ${fmtNumber(latest.rate)}`,
-        `Ganancia estimada: ${fmtNumber(latest.profit_dop)} DOP · ${when}`,
-      ].join("\n");
-    },
-    drift: (data) => {
-      if (!Array.isArray(data) || data.length === 0) {
-        return "Sin eventos de drift registrados.";
-      }
-      const [latest] = data;
-      const arrow = latest.direction === "UP" ? "↑" : "↓";
-      return [
-        `${data.length} eventos en historial.`,
-        `Último: ${arrow} ${latest.direction} · ${fmtNumber(latest.value, 3)} DOP`,
-        `EWMA ${fmtNumber(latest.ewma, 3)} · Umbral ${fmtNumber(latest.threshold, 3)}`,
-      ].join("\n");
-    },
-  };
-
-  const extraFetchers = {
-    fetch: async () => {
-      const results = {};
-      try {
-        const response = await fetch("/api/consensus");
-        if (response.ok) {
-          results.consensus = await response.json();
-        }
-      } catch (error) {
-        console.warn("No se pudo obtener consenso tras la captura", error);
-      }
-      try {
-        const providersResponse = await fetch("/api/providers");
-        if (providersResponse.ok) {
-          results.providers = await providersResponse.json();
-        }
-      } catch (error) {
-        console.warn("No se pudo refrescar proveedores tras la captura", error);
-      }
-      return results;
-    },
-  };
-
-  const commandButtons = document.querySelectorAll(".command-btn[data-endpoint], .command-btn[data-command]");
-  commandButtons.forEach((button) => {
-    if (button.disabled) {
-      return;
-    }
-
-    button.addEventListener("click", async () => {
-      const commandKey = button.dataset.command || "default";
-
-      // Handle trade form toggle specially
-      if (commandKey === "trade-form") {
-        const form = document.getElementById("trade-form");
-        if (form) {
-          form.style.display = form.style.display === "none" ? "block" : "none";
-        }
-        return;
-      }
-
-      const endpoint = button.dataset.endpoint;
-      const method = button.dataset.method || "POST";
-      const statusTarget = button.dataset.statusTarget;
-      const statusElement = statusTarget
-        ? document.querySelector(statusTarget)
-        : button.closest("li")?.querySelector(".command-status");
-
-      if (!endpoint) {
-        return;
-      }
-
-      const setStatus = (message) => {
-        if (statusElement) {
-          statusElement.textContent = message;
-        }
-      };
-
-      setStatus("Ejecutando…");
-      button.disabled = true;
-      button.classList.add("is-loading");
-
-      try {
-        const response = await fetch(endpoint, { method });
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `Error ${response.status}`);
-        }
-
-        let payload = null;
-        const contentType = response.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
-          try {
-            payload = await response.json();
-          } catch (jsonError) {
-            console.warn("No se pudo parsear JSON de respuesta", jsonError);
-          }
-        }
-
-        const extras = extraFetchers[commandKey] ? await extraFetchers[commandKey]() : null;
-        const formatter = formatters[commandKey];
-        const message = formatter ? formatter(payload, extras) : payload?.detail || "Comando completado.";
-        setStatus(message);
-
-        if (commandKey === "providers" && Array.isArray(payload)) {
-          updateProvidersTable(payload);
-        } else if (commandKey === "fetch" && extras && Array.isArray(extras.providers)) {
-          updateProvidersTable(extras.providers);
-        }
-      } catch (error) {
-        console.error(error);
-        setStatus(error.message || "Error inesperado.");
-      } finally {
-        button.disabled = false;
-        button.classList.remove("is-loading");
-      }
-    });
-  });
-
-  // Trade form submit handler
-  const tradeSubmitBtn = document.getElementById("trade-submit-btn");
-  if (tradeSubmitBtn) {
-    tradeSubmitBtn.addEventListener("click", async () => {
-      const actionRadio = document.querySelector('input[name="trade-action-radio"]:checked');
-      const action = actionRadio ? actionRadio.value : "sell";
-      const amount = parseFloat(document.getElementById("trade-amount").value);
-      const rateInput = document.getElementById("trade-rate").value;
-      const feesInput = document.getElementById("trade-fees").value;
-      const resultElement = document.getElementById("trade-result");
-
-      // Limpiar clase de error
-      resultElement.classList.remove("error");
-
-      // Validación
-      if (!amount || amount <= 0) {
-        resultElement.textContent = "❌ Error: El monto en USD debe ser mayor a 0";
-        resultElement.classList.add("error");
-        return;
-      }
-
-      const payload = {
-        action: action,
-        usd_amount: amount,
-      };
-
-      if (rateInput && parseFloat(rateInput) > 0) {
-        payload.rate = parseFloat(rateInput);
-      }
-
-      if (feesInput && parseFloat(feesInput) >= 0) {
-        payload.fees = parseFloat(feesInput);
-      }
-
-      resultElement.textContent = "⏳ Registrando operación...";
-      resultElement.classList.remove("error");
-      tradeSubmitBtn.disabled = true;
-      tradeSubmitBtn.textContent = "⏳ Procesando...";
-
-      try {
-        const response = await fetch("/api/trade", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || `Error ${response.status}`);
-        }
-
-        const trade = await response.json();
-        const actionEmoji = trade.action === "buy" ? "💵" : "💸";
-        const profitSign = trade.profit_dop >= 0 ? "+" : "";
-        const profitColor = trade.profit_dop >= 0 ? "#10b981" : "#ef4444";
-
-        resultElement.innerHTML = `
-          <div style="text-align: center; padding: 0.5rem 0;">
-            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">${actionEmoji}</div>
-            <div style="font-size: 1.125rem; font-weight: 600; color: #374151; margin-bottom: 0.75rem;">
-              ✅ Operación registrada exitosamente
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; text-align: left;">
-              <div style="background: #f9fafb; padding: 0.75rem; border-radius: 6px;">
-                <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem;">Tipo</div>
-                <div style="font-weight: 600; color: #374151;">${trade.action.toUpperCase()}</div>
-              </div>
-              <div style="background: #f9fafb; padding: 0.75rem; border-radius: 6px;">
-                <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem;">Monto</div>
-                <div style="font-weight: 600; color: #374151;">USD ${fmtNumber(trade.usd_amount)}</div>
-              </div>
-              <div style="background: #f9fafb; padding: 0.75rem; border-radius: 6px;">
-                <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem;">Tasa</div>
-                <div style="font-weight: 600; color: #374151;">${fmtNumber(trade.rate)} DOP/USD</div>
-              </div>
-              <div style="background: #f9fafb; padding: 0.75rem; border-radius: 6px;">
-                <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem;">Ganancia estimada</div>
-                <div style="font-weight: 600; color: #374151;">${profitSign}${fmtNumber(trade.profit_dop)} DOP</div>
-              </div>
-            </div>
-            <div style="margin-top: 1rem; font-size: 0.75rem; color: #6b7280;">
-              Comisiones: ${fmtNumber(trade.fees)} DOP
-            </div>
-          </div>
-        `;
-
-        // Limpiar formulario después de 3 segundos
-        setTimeout(() => {
-          document.getElementById("trade-amount").value = "";
-          document.getElementById("trade-rate").value = "";
-          document.getElementById("trade-fees").value = "";
-        }, 3000);
-      } catch (error) {
-        console.error(error);
-        resultElement.textContent = `❌ Error: ${error.message}`;
-        resultElement.classList.add("error");
-      } finally {
-        tradeSubmitBtn.disabled = false;
-        tradeSubmitBtn.textContent = "✅ Registrar operación";
-      }
-    });
-  }
-
-  // ============================================================================ 
-  // Sidebar de Métricas
-  // ============================================================================ 
-  console.log('DOM cargado. Configurando la barra lateral...');
-
-  const sidebar = document.getElementById('metrics-sidebar');
-  const toggleBtn = document.getElementById('sidebar-toggle');
-
-  if (!sidebar) {
-    console.error('Error: No se encontró el elemento de la barra lateral #metrics-sidebar.');
-    return;
-  }
-  if (!toggleBtn) {
-    console.error('Error: No se encontró el botón de activación #sidebar-toggle.');
+  if (!amount || amount <= 0) {
+    buyEl.textContent = '—';
+    sellEl.textContent = '—';
+    profitEl.textContent = '—';
     return;
   }
 
-  console.log('Barra lateral y botón encontrados correctamente.');
+  const buyRate = consensusData ? consensusData.buy_rate : window.GLOBAL_CONSENSUS_BUY_RATE;
+  const sellRate = consensusData ? consensusData.sell_rate : window.GLOBAL_CONSENSUS_SELL_RATE;
 
-  const applySidebarState = (isCollapsed) => {
-    console.log(`Aplicando estado: colapsado = ${isCollapsed}`);
-    sidebar.classList.toggle('collapsed', isCollapsed);
-  };
+  if (!buyRate || !sellRate) return;
 
-  // Restaurar estado desde localStorage
-  const isSidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-  console.log(`Restaurando desde localStorage: colapsado = ${isSidebarCollapsed}`);
-  applySidebarState(isSidebarCollapsed);
+  const buyTotal = amount * buyRate;
+  const sellTotal = amount * sellRate;
+  const profit = sellTotal - buyTotal;
 
-  // Event listener para el botón
-  toggleBtn.addEventListener('click', () => {
-    const currentlyCollapsed = sidebar.classList.contains('collapsed');
-    console.log(`¡Botón clickeado! Estado actual: colapsado = ${currentlyCollapsed}. Cambiando a: ${!currentlyCollapsed}`);
-    applySidebarState(!currentlyCollapsed);
-    localStorage.setItem('sidebarCollapsed', !currentlyCollapsed);
-  });
+  buyEl.textContent = `DOP ${fmtNumber(buyTotal)}`;
+  sellEl.textContent = `DOP ${fmtNumber(sellTotal)}`;
+  profitEl.textContent = `+DOP ${fmtNumber(profit)}`;
+}
 
-  // ============================================================================ 
-  // Comparación de Proveedores
-  // ============================================================================ 
-  const providerStatusData = GLOBAL_PROVIDER_STATUS_JSON;
+document.addEventListener('DOMContentLoaded', () => {
+  const calcAmount = document.getElementById('calc-amount');
+  if (calcAmount) {
+    calcAmount.addEventListener('input', (e) => {
+      updateCalculator(parseFloat(e.target.value));
+    });
+    // Valor inicial
+    calcAmount.value = '500';
+    updateCalculator(500);
+  }
+});
 
-  const provider1Select = document.getElementById('provider-1');
-  const provider2Select = document.getElementById('provider-2');
-  const comparisonContainer = document.getElementById('comparison-results-container');
+// ============================================================================ 
+// Filtros de Proveedores
+// ============================================================================ 
+let allProviderRows = [];
 
-  function updateComparison() {
-    const name1 = provider1Select.value;
-    const name2 = provider2Select.value;
-
-    if (!name1 || !name2) {
-      comparisonContainer.innerHTML = `
-        <div class="empty-state-small">
-          <p>Selecciona dos proveedores para iniciar la comparación.</p>
-        </div>`;
-      return;
-    }
-
-    const data1 = providerStatusData.find(p => p.name === name1);
-    const data2 = providerStatusData.find(p => p.name === name2);
-
-    if (!data1 || !data2) {
-      comparisonContainer.innerHTML = `<div class="empty-state-small"><p>Error: No se encontraron datos para los proveedores seleccionados.</p></div>`;
-      return;
-    }
-
-    const spread1 = (data1.sell_rate && data1.buy_rate) ? data1.sell_rate - data1.buy_rate : null;
-    const spread2 = (data2.sell_rate && data2.buy_rate) ? data2.sell_rate - data2.buy_rate : null;
-
-    const getWinnerClass = (val1, val2, lowerIsBetter = false) => {
-      if (val1 === null || val2 === null || val1 === val2) return ['', ''];
-      if (lowerIsBetter) {
-        return val1 < val2 ? ['winner', ''] : ['', 'winner'];
-      }
-      return val1 > val2 ? ['winner', ''] : ['', 'winner'];
+function captureProviderRows() {
+  const tbody = document.getElementById('provider-table-body');
+  if (!tbody) return;
+  
+  allProviderRows = Array.from(tbody.querySelectorAll('tr')).map(row => {
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 6) return null;
+    return {
+      element: row,
+      name: cells[0].textContent.trim().toLowerCase(),
+      enabled: cells[1].textContent.trim().includes('Sí'),
+      origin: cells[2].textContent.trim().toLowerCase()
     };
+  }).filter(r => r !== null);
+}
 
-    const [buyWinner1, buyWinner2] = getWinnerClass(data1.buy_rate, data2.buy_rate, false); // Higher is better
-    const [sellWinner1, sellWinner2] = getWinnerClass(data1.sell_rate, data2.sell_rate, true); // Lower is better
-    const [spreadWinner1, spreadWinner2] = getWinnerClass(spread1, spread2, true); // Lower is better
+function applyProviderFilters() {
+  const searchInput = document.getElementById('provider-search');
+  const statusFilter = document.getElementById('provider-status-filter');
+  const originFilter = document.getElementById('provider-origin-filter');
+  
+  const searchVal = searchInput ? searchInput.value.toLowerCase() : '';
+  const statusVal = statusFilter ? statusFilter.value : 'all';
+  const originVal = originFilter ? originFilter.value : 'all';
+  
+  let visibleCount = 0;
 
-    const time1 = data1.last_timestamp ? new Date(data1.last_timestamp) : null;
-    const time2 = data2.last_timestamp ? new Date(data2.last_timestamp) : null;
-    const [timeWinner1, timeWinner2] = getWinnerClass(time1, time2, false); // Newer (higher timestamp) is better
+  allProviderRows.forEach(row => {
+    let visible = true;
 
-    const tableHTML = `
-      <table class="comparison-table">
-        <thead>
-          <tr>
-            <th>Métrica</th>
-            <th>${data1.name}</th>
-            <th>${data2.name}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Compra (Vender USD)</td>
-            <td class="${buyWinner1}">${data1.buy_rate ? data1.buy_rate.toFixed(2) : '—'}</td>
-            <td class="${buyWinner2}">${data2.buy_rate ? data2.buy_rate.toFixed(2) : '—'}</td>
-          </tr>
-          <tr>
-            <td>Venta (Comprar USD)</td>
-            <td class="${sellWinner1}">${data1.sell_rate ? data1.sell_rate.toFixed(2) : '—'}</td>
-            <td class="${sellWinner2}">${data2.sell_rate ? data2.sell_rate.toFixed(2) : '—'}</td>
-          </tr>
-          <tr>
-            <td>Spread</td>
-            <td class="${spreadWinner1}">${spread1 ? spread1.toFixed(3) : '—'}</td>
-            <td class="${spreadWinner2}">${spread2 ? spread2.toFixed(3) : '—'}</td>
-          </tr>
-          <tr>
-            <td>Actualización</td>
-            <td class="${timeWinner1}">${time1 ? time1.toLocaleTimeString() : '—'}</td>
-            <td class="${timeWinner2}">${time2 ? time2.toLocaleTimeString() : '—'}</td>
-          </tr>
-        </tbody>
-      </table>
-    `;
-    comparisonContainer.innerHTML = tableHTML;
+    if (searchVal && !row.name.includes(searchVal)) visible = false;
+    
+    if (statusVal === 'active' && !row.enabled) visible = false;
+    else if (statusVal === 'inactive' && row.enabled) visible = false;
+
+    if (originVal !== 'all' && !row.origin.includes(originVal.toLowerCase())) visible = false;
+
+    row.element.style.display = visible ? '' : 'none';
+    if (visible) visibleCount++;
+  });
+
+  const visibleSpan = document.getElementById('visible-count');
+  if (visibleSpan) visibleSpan.textContent = visibleCount;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const search = document.getElementById('provider-search');
+  const statusF = document.getElementById('provider-status-filter');
+  const originF = document.getElementById('provider-origin-filter');
+  const clearBtn = document.getElementById('clear-filters-btn');
+
+  if (search) search.addEventListener('input', applyProviderFilters);
+  if (statusF) statusF.addEventListener('change', applyProviderFilters);
+  if (originF) originF.addEventListener('change', applyProviderFilters);
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (search) search.value = '';
+      if (statusF) statusF.value = 'all';
+      if (originF) originF.value = 'all';
+      applyProviderFilters();
+      showToast('Filtros de proveedores limpiados', 'info');
+    });
   }
 
-  if (provider1Select && provider2Select) {
-    provider1Select.addEventListener('change', updateComparison);
-    provider2Select.addEventListener('change', updateComparison);
+  // Capturar inicial
+  captureProviderRows();
+});
+
+// ============================================================================ 
+// Comparación de Proveedores
+// ============================================================================ 
+function updateComparison() {
+  const p1 = document.getElementById('provider-1').value;
+  const p2 = document.getElementById('provider-2').value;
+  const container = document.getElementById('comparison-results-container');
+  if (!container) return;
+
+  if (!p1 || !p2) {
+    container.innerHTML = `<div class="empty-state-small"><p>Selecciona dos proveedores para iniciar la comparación.</p></div>`;
+    return;
   }
 
-  // ============================================================================ 
-  // Edición y Eliminación de Trades
-  // ============================================================================ 
-  const tradeHistoryTableBody = document.querySelector('#trade-history-table-body'); // Asumiendo que la tabla tiene un ID
+  const list = window.GLOBAL_PROVIDER_STATUS_JSON || [];
+  const data1 = list.find(p => p.name === p1);
+  const data2 = list.find(p => p.name === p2);
 
-  document.addEventListener('click', async (event) => {
-    // Manejar eliminación de trade
-    if (event.target.classList.contains('btn-delete-trade')) {
-      const tradeId = event.target.dataset.tradeId;
-      if (!tradeId) return;
-
-      if (confirm(`¿Estás seguro de que quieres eliminar el trade #${tradeId}?`)) {
-        try {
-          const response = await fetch(`/api/trade/${tradeId}`, {
-            method: 'DELETE',
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || `Error ${response.status}`);
-          }
-
-          showToast(`Trade #${tradeId} eliminado exitosamente.`, 'success');
-          // Recargar la página para actualizar el historial
-          location.reload();
-        } catch (error) {
-          console.error('Error al eliminar trade:', error);
-          showToast(`Error al eliminar trade #${tradeId}: ${error.message}`, 'error');
-        }
-      }
-    }
-
-    // Manejar edición de trade (mostrar formulario)
-    if (event.target.classList.contains('btn-edit-trade')) {
-      const tradeId = event.target.dataset.tradeId;
-      if (!tradeId) return;
-
-      // Encontrar la fila del trade
-      const tradeRow = event.target.closest('tr');
-      if (!tradeRow) return;
-
-      // Obtener datos actuales del trade (simplificado, idealmente se haría una llamada a la API)
-      const currentAction = tradeRow.children[1].textContent.trim().toLowerCase();
-      const currentUsdAmount = parseFloat(tradeRow.children[2].textContent.trim());
-      const currentRate = parseFloat(tradeRow.children[3].textContent.trim());
-      // const currentFees = ... (no visible en la tabla, se necesitaría otra forma de obtenerlo) 
-
-      // Crear un formulario de edición simple (o usar un modal)
-      const editFormHtml = `
-      <tr class="edit-form-row">
-        <td colspan="6">
-          <div style="padding: 1rem; background: var(--background-tertiary); border-radius: 8px; margin-top: 0.5rem;">
-            <h4>Editar Trade #${tradeId}</h4>
-            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-              <select id="edit-action-${tradeId}" style="flex: 1;">
-                <option value="buy" ${currentAction === 'buy' ? 'selected' : ''}>COMPRAR</option>
-                <option value="sell" ${currentAction === 'sell' ? 'selected' : ''}>VENDER</option>
-              </select>
-              <input type="number" id="edit-usd-amount-${tradeId}" value="${currentUsdAmount}" placeholder="Monto USD" style="flex: 1;">
-              <input type="number" id="edit-rate-${tradeId}" value="${currentRate}" placeholder="Tasa" style="flex: 1;">
-              <input type="number" id="edit-fees-${tradeId}" value="0" placeholder="Comisiones" style="flex: 1;"> <!-- Fees hardcoded for now -->
-            </div>
-            <button class="btn-save-trade mini-btn" data-trade-id="${tradeId}">💾 Guardar</button>
-            <button class="btn-cancel-edit mini-btn">❌ Cancelar</button>
-          </div>
-        </td>
-      </tr>
-    `;
-
-    // Insertar formulario después de la fila actual
-    tradeRow.insertAdjacentHTML('afterend', editFormHtml);
-    tradeRow.style.display = 'none'; // Ocultar fila original
+  if (!data1 || !data2) {
+    container.innerHTML = `<div class="empty-state-small"><p>Error: Datos no disponibles.</p></div>`;
+    return;
   }
 
-  // Manejar guardar edición
-  if (event.target.classList.contains('btn-save-trade')) {
+  const spread1 = (data1.sell_rate && data1.buy_rate) ? data1.sell_rate - data1.buy_rate : null;
+  const spread2 = (data2.sell_rate && data2.buy_rate) ? data2.sell_rate - data2.buy_rate : null;
+
+  const winner = (v1, v2, lowerIsBetter = false) => {
+    if (v1 === null || v2 === null || v1 === v2) return ['', ''];
+    if (lowerIsBetter) return v1 < v2 ? ['winner', ''] : ['', 'winner'];
+    return v1 > v2 ? ['winner', ''] : ['', 'winner'];
+  };
+
+  const [wBuy1, wBuy2] = winner(data1.buy_rate, data2.buy_rate, false);
+  const [wSell1, wSell2] = winner(data1.sell_rate, data2.sell_rate, true);
+  const [wSpread1, wSpread2] = winner(spread1, spread2, true);
+
+  container.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Métrica</th>
+          <th>${data1.name}</th>
+          <th>${data2.name}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Compra (Vender USD)</td>
+          <td class="${wBuy1}">${fmtNumber(data1.buy_rate)}</td>
+          <td class="${wBuy2}">${fmtNumber(data2.buy_rate)}</td>
+        </tr>
+        <tr>
+          <td>Venta (Comprar USD)</td>
+          <td class="${wSell1}">${fmtNumber(data1.sell_rate)}</td>
+          <td class="${wSell2}">${fmtNumber(data2.sell_rate)}</td>
+        </tr>
+        <tr>
+          <td>Spread</td>
+          <td class="${wSpread1}">${fmtNumber(spread1, 3)}</td>
+          <td class="${wSpread2}">${fmtNumber(spread2, 3)}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const p1 = document.getElementById('provider-1');
+  const p2 = document.getElementById('provider-2');
+  if (p1) p1.addEventListener('change', updateComparison);
+  if (p2) p2.addEventListener('change', updateComparison);
+});
+
+// ============================================================================ 
+// Edición y Eliminación de Trades (Operaciones)
+// ============================================================================ 
+document.addEventListener('click', async (event) => {
+  // Editar Trade (Abrir modal con datos)
+  if (event.target.classList.contains('btn-edit-trade')) {
     const tradeId = event.target.dataset.tradeId;
     if (!tradeId) return;
 
-    const action = document.getElementById(`edit-action-${tradeId}`).value;
-    const usd_amount = parseFloat(document.getElementById(`edit-usd-amount-${tradeId}`).value);
-    const rate = parseFloat(document.getElementById(`edit-rate-${tradeId}`).value);
-    const fees = parseFloat(document.getElementById(`edit-fees-${tradeId}`).value);
+    const tr = event.target.closest('tr');
+    if (!tr) return;
 
-    try {
-      const response = await fetch(`/api/trade/${tradeId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, usd_amount, rate, fees }),
-      });
+    const action = tr.children[1].textContent.trim().toLowerCase();
+    const usd = parseFloat(tr.children[2].textContent.replace(/[^\d.-]/g, ''));
+    const rate = parseFloat(tr.children[3].textContent.replace(/[^\d.-]/g, ''));
+    
+    openTradeModal({
+      id: tradeId,
+      action: action,
+      usd_amount: usd,
+      rate: rate
+    });
+  }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `Error ${response.status}`);
+  // Eliminar Trade (Llamada API con animación fade-out)
+  if (event.target.classList.contains('btn-delete-trade')) {
+    const tradeId = event.target.dataset.tradeId;
+    if (!tradeId) return;
+
+    if (confirm(`¿Estás seguro de que quieres eliminar el registro #${tradeId}?`)) {
+      const tr = event.target.closest('tr');
+      if (tr) {
+        tr.style.opacity = '0.4'; // visual state
       }
 
-      showToast(`Trade #${tradeId} actualizado exitosamente.`, 'success');
-      location.reload(); // Recargar para ver cambios
-    } catch (error) {
-      console.error('Error al actualizar trade:', error);
-      showToast(`Error al actualizar trade #${tradeId}: ${error.message}`, 'error');
+      try {
+        const response = await fetch(`/api/trade/${tradeId}`, { method: 'DELETE' });
+        if (!response.ok) {
+          throw new Error("No se pudo eliminar de la base de datos.");
+        }
+
+        showToast(`Registro #${tradeId} eliminado exitosamente.`, 'success');
+        
+        // Animación suave de eliminación
+        if (tr) {
+          tr.classList.add('removing-row');
+          setTimeout(() => {
+            tr.remove();
+            refreshDashboardData(); // Recalcula KPIs tras eliminar fila
+          }, 300);
+        }
+
+      } catch (err) {
+        showToast(err.message, 'error');
+        if (tr) tr.style.opacity = '1';
+      }
     }
   }
+});
 
-  // Manejar cancelar edición
-  if (event.target.classList.contains('btn-cancel-edit')) {
-    const editFormRow = event.target.closest('.edit-form-row');
-    if (editFormRow) {
-      editFormRow.previousElementSibling.style.display = ''; // Mostrar fila original
-      editFormRow.remove();
-    }
+// ============================================================================ 
+// Sidebar de Métricas Clave
+// ============================================================================ 
+document.addEventListener('DOMContentLoaded', () => {
+  const sidebar = document.getElementById('metrics-sidebar');
+  const toggleBtn = document.getElementById('sidebar-toggle');
+  const overlay = document.getElementById('sidebar-overlay');
+  const closeBtn = document.getElementById('metrics-sidebar')?.querySelector('.sidebar-close-btn');
+
+  function openSidebar() {
+    if (sidebar) sidebar.classList.add('active');
+    if (overlay) overlay.style.display = 'block';
   }
-  });
 
-  // ============================================================================
-  // Inicialización
-  // ============================================================================
+  function closeSidebar() {
+    if (sidebar) sidebar.classList.remove('active');
+    if (overlay) overlay.style.display = 'none';
+  }
 
-  // Iniciar actualizador de tiempo
-  startTimeAgoUpdater();
+  if (toggleBtn) toggleBtn.addEventListener('click', openSidebar);
+  if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+  if (overlay) overlay.addEventListener('click', closeSidebar);
+});
 
-  // Iniciar auto-refresh
-  startAutoRefresh();
+// ============================================================================ 
+// Comandos Manuales Ejecución
+// ============================================================================ 
+document.addEventListener('DOMContentLoaded', () => {
+  const commandButtons = document.querySelectorAll(".command-btn[data-endpoint]");
+  commandButtons.forEach(button => {
+    button.addEventListener("click", async () => {
+      const endpoint = button.dataset.endpoint;
+      const method = button.dataset.method || "POST";
+      const statusElement = button.closest("li")?.querySelector(".command-status") || document.getElementById('hero-status');
 
-  // Renderizar gráfico inicial
-  console.log('🚀 Inicializando dashboard - llamando renderChart(24)');
-  const canvasElement = document.getElementById('trend-chart');
-  console.log('Canvas element found:', !!canvasElement);
+      if (!endpoint) return;
 
-  if (canvasElement) {
-    renderChart(24).then(() => {
-      console.log('✅ Gráfico de tendencia cargado inicialmente');
-    }).catch(error => {
-      console.error('❌ Error al cargar gráfico inicial:', error);
+      const oldText = button.textContent;
+      button.disabled = true;
+      button.textContent = "⌛ Ejecutando...";
+      if (statusElement) statusElement.textContent = "Procesando petición en segundo plano...";
+
+      try {
+        const response = await fetch(endpoint, { method });
+        if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+        
+        showToast("Comando completado exitosamente", "success");
+        if (statusElement) statusElement.textContent = "Comando completado exitosamente. Sincronizando panel...";
+        
+        // Sincronización SPA local inmediata
+        refreshDashboardData(true);
+
+      } catch (err) {
+        console.error(err);
+        showToast(`Error al ejecutar: ${err.message}`, "error");
+        if (statusElement) statusElement.textContent = `❌ Error: ${err.message}`;
+      } finally {
+        button.disabled = false;
+        button.textContent = oldText;
+      }
     });
-  } else {
-    console.error('❌ Canvas #trend-chart no encontrado en inicialización');
-  }
-  
-  // Capturar filas de proveedores para filtros
-  if (providerTableBody) {
-    captureProviderRows();
-  }
-  
-  // Recarga completa de la página cada 300 segundos
-  const fullPageReloadInterval = setInterval(() => {
-    // Solo recargar si la página está visible para no molestar en segundo plano
-    if (document.visibilityState === 'visible') {
-      showToast('Recargando página completa...', 'info');
-      setTimeout(() => location.reload(), 500);
-    }
-  }, 300000); // 300 segundos
+  });
+});
 
-  // Limpiar intervals al salir
-  window.addEventListener('beforeunload', () => {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    if (timeAgoInterval) clearInterval(timeAgoInterval);
-    if (liveUpdateInterval) clearInterval(liveUpdateInterval);
-    if (trendChart) trendChart.destroy();
-    if (fullPageReloadInterval) clearInterval(fullPageReloadInterval);
-  });
-  
-  // Pausar auto-refresh cuando la pestaña no está visible
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+// ============================================================================ 
+// Manejo del Cambio de Tema (Modo Oscuro / Claro)
+// ============================================================================ 
+function initThemeToggle() {
+  const toggleBtn = document.getElementById("theme-toggle");
+  if (!toggleBtn) return;
+
+  const iconEl = toggleBtn.querySelector("[data-theme-icon]");
+  const labelEl = toggleBtn.querySelector("[data-theme-label]");
+
+  function updateToggleButton(theme) {
+    if (theme === "dark") {
+      if (iconEl) iconEl.textContent = "🌙";
+      if (labelEl) labelEl.textContent = "Modo oscuro";
+      toggleBtn.setAttribute("aria-pressed", "true");
     } else {
-      startAutoRefresh();
+      if (iconEl) iconEl.textContent = "☀️";
+      if (labelEl) labelEl.textContent = "Modo claro";
+      toggleBtn.setAttribute("aria-pressed", "false");
     }
+  }
+
+  // Inicializar el estado del botón según el atributo actual del document Element
+  const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+  updateToggleButton(currentTheme);
+
+  toggleBtn.addEventListener("click", async () => {
+    const activeTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", activeTheme);
+    window.localStorage.setItem("cambio-theme", activeTheme);
+    updateToggleButton(activeTheme);
+
+    // Re-renderizar el gráfico si existe para actualizar colores de cuadrícula y etiquetas
+    if (trendChart) {
+      await renderChart(currentChartPeriod);
+    }
+    
+    showToast(`Tema cambiado a modo ${activeTheme === "dark" ? "oscuro" : "claro"}`, "success");
   });
+}
+
+// ============================================================================ 
+// Inicialización del Dashboard al Cargar DOM
+// ============================================================================ 
+document.addEventListener('DOMContentLoaded', () => {
+  // 1. Iniciar tiempo transcurrido
+  setInterval(() => {
+    const timeAgoElement = document.getElementById('time-ago');
+    if (timeAgoElement) {
+      timeAgoElement.textContent = updateTimeAgo(lastUpdateTimestamp);
+    }
+  }, 5000);
+
+  // 2. Iniciar SSE
+  initSSE();
+
+  // 3. Renderizar Gráfico Inicial (24 horas)
+  renderChart(24);
+
+  // 4. Registrar callback para refrescar y renderizar al cambiar tamaño de ventana
+  let resizeTimeout;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      if (trendChart) trendChart.resize();
+    }, 150);
+  });
+
+  // 5. Iniciar tema
+  initThemeToggle();
 });

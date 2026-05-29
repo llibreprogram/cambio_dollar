@@ -14,7 +14,7 @@ import numpy as np
 from zoneinfo import ZoneInfo
 
 from .config import Settings, get_settings
-from .models import ForecastResult, RateSnapshot
+from .models import ForecastResult, RateSnapshot, ConsensusSnapshotRecord
 from .repository import MarketRepository
 
 
@@ -34,24 +34,53 @@ class ForecastService:
         self._timezone = ZoneInfo(self.settings.timezone)
 
     def project_end_of_day_profit(self) -> ForecastResult:
-        snapshots = self.repository.iter_snapshots(limit=self.settings.forecast_points)
-        if len(snapshots) < 5:
-            raise RuntimeError(
-                "Se requieren al menos 5 observaciones recientes para generar un pronóstico confiable."
-            )
-        model = self._fit_trend_model(snapshots)
-        latest = snapshots[0]
+        # Intentamos obtener primero los consensus_snapshots históricos
+        consensus_records = self.repository.list_consensus_snapshots(limit=self.settings.forecast_points)
+        
+        if len(consensus_records) >= 5:
+            points = [(r.timestamp, r.mid_rate) for r in consensus_records]
+            model = self._fit_trend_model_points(points)
+            latest_time = consensus_records[0].timestamp
+            latest_mid = consensus_records[0].mid_rate
+        else:
+            # Obtener suficientes rate snapshots
+            raw_snapshots = self.repository.iter_snapshots(limit=self.settings.forecast_points * 25)
+            
+            # Agrupar por timestamp
+            grouped: dict[datetime, list[float]] = {}
+            for s in raw_snapshots:
+                grouped.setdefault(s.timestamp, []).append(s.mid_rate)
+            
+            # Promediar
+            points = [
+                (ts, sum(rates) / len(rates))
+                for ts, rates in grouped.items()
+            ]
+            # Ordenar cronológicamente (más recientes primero)
+            points.sort(key=lambda x: x[0], reverse=True)
+            
+            # Limitar al número de forecast points configurado
+            points = points[:self.settings.forecast_points]
+            
+            if len(points) < 5:
+                raise RuntimeError(
+                    "Se requieren al menos 5 observaciones recientes para generar un pronóstico confiable."
+                )
+            
+            model = self._fit_trend_model_points(points)
+            latest_time = points[0][0]
+            latest_mid = points[0][1]
+
         start_of_day = datetime.combine(
-            latest.timestamp.astimezone(self._timezone).date(),
+            latest_time.astimezone(self._timezone).date(),
             time.min,
             tzinfo=self._timezone,
         )
 
         realized_profit = self.repository.get_profit_summary(since=start_of_day)
-        remaining_hours = self._hours_until_close(latest.timestamp)
+        remaining_hours = self._hours_until_close(latest_time)
         expected_rate = model.intercept + model.slope_per_hour * remaining_hours
-        current_mid = latest.mid_rate
-        projected_increment = expected_rate - current_mid
+        projected_increment = expected_rate - latest_mid
 
         expected_unrealized = (
             projected_increment - self.settings.transaction_cost
@@ -67,19 +96,25 @@ class ForecastService:
             confidence_interval=model.std_error * 2 * self.settings.trading_units,
             details=(
                 "Regresión lineal sobre las últimas "
-                f"{len(snapshots)} observaciones para estimar la variación del tipo de cambio."
+                f"{len(points)} observaciones para estimar la variación del tipo de cambio."
             ),
         )
 
     # ------------------------------------------------------------------
-    def _fit_trend_model(self, snapshots: list[RateSnapshot]) -> TrendModel:
-        ordered = list(sorted(snapshots, key=lambda s: s.timestamp))
-        base = ordered[0].timestamp
+    def _fit_trend_model_points(self, points: list[tuple[datetime, float]]) -> TrendModel:
+        # points es una lista de (timestamp, mid_rate), ordenada cronológicamente
+        ordered = list(sorted(points, key=lambda p: p[0]))
+        base = ordered[0][0]
         hours = np.array([
-            (snap.timestamp - base).total_seconds() / 3600.0 for snap in ordered
+            (p[0] - base).total_seconds() / 3600.0 for p in ordered
         ])
-        mid_rates = np.array([snap.mid_rate for snap in ordered])
-        slope, intercept = np.polyfit(hours, mid_rates, 1)
+        if len(hours) < 2 or (hours.max() - hours.min()) < 1e-5:
+            raise RuntimeError("Variación temporal insuficiente para calcular tendencia.")
+        mid_rates = np.array([p[1] for p in ordered])
+        try:
+            slope, intercept = np.polyfit(hours, mid_rates, 1)
+        except (np.linalg.LinAlgError, ValueError) as exc:
+            raise RuntimeError(f"Error de ajuste algebraico en el modelo de forecast: {exc}") from exc
         predicted = intercept + slope * hours
         residuals = mid_rates - predicted
         std_error = float(np.std(residuals))
